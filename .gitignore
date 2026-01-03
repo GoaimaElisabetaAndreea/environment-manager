@@ -7,3 +7,8 @@ server/node_modules
 server/.env
 
 node_modules
+
+.github
+
+client/.vscode
+client/node_modules
