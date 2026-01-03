@@ -12,3 +12,7 @@ node_modules
 
 client/.vscode
 client/node_modules
+
+client/src/firebase.js
+
+client/.env

@@ -5,20 +5,11 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
-      path: '/',
+      path: '/dashboard',
       name: 'dashboard',
       component: DashboardView
     },
-    {
-      path: '/env/:id', 
-      name: 'environment-details',
-      component: () => import('../views/EnvironmentDetails.vue')
-    },
-    {
-      path: '/login',
-      name: 'login',
-      component: () => import('../views/LoginView.vue')
-    }
+
   ]
 })
 
