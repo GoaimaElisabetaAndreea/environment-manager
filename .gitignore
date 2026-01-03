@@ -1,1 +1,9 @@
+.DS_Store
+Thumbs.db
+
+server/serviceAccountKey.json
 server/node_modules
+
+server/.env
+
+node_modules
