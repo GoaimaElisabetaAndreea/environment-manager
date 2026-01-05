@@ -4,6 +4,8 @@ import LoginView from '../views/LoginView.vue';
 import RegisterView from '../views/RegisterView.vue';
 import SecretCreateView from '../views/SecretCreateView.vue' 
 import SecretReadView from '../views/SecretReadView.vue'
+import CommandBuilderView from '../views/CommandBuilderView.vue'
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -32,7 +34,11 @@ const router = createRouter({
       name: 'view-secret', 
       component: SecretReadView 
     },
-
+    {
+      path: '/commands',
+      name: 'commands',
+      component: CommandBuilderView
+    },
 
   ]
 });

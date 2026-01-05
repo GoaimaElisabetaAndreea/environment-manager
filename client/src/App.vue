@@ -15,6 +15,7 @@ const showEditEnvDialog = ref(false)
 const editEnvName = ref('')
 const editEnvId = ref(null)
 const updatingEnv = ref(false)
+const editEnvVars = ref([]) 
 
 const authStore = useAuthStore()
 const envStore = useEnvironmentStore()
@@ -66,7 +67,19 @@ const handleUpdateEnv = async () => {
   updatingEnv.value = true;
 
   try{
-    await envStore.updateEnvironment(editEnvId.value, editEnvName.value);
+    const variablesObj = {}
+
+    editEnvVars.value.forEach(v =>{
+      if(v.key && v.value){
+        variablesObj[v.key] = v.value;
+      }
+    })
+
+    await envStore.updateEnvironment(editEnvId.value, {
+      name: editEnvName.value,
+      variables: variablesObj
+    });
+
     showEditEnvDialog.value = false;
   }catch (e) {
     alert('Error!')
@@ -82,7 +95,24 @@ const handleDeleteEnv = async(id) => {
 const openEditDialog = (env) => {
   editEnvId.value = env.id
   editEnvName.value = env.name
+
+  editEnvVars.value = [];
+  if(env.variables){
+    Object.entries(env.variables).forEach(([key, value]) => {
+      editEnvVars.value.push({key, value})
+    })
+  } else {
+    editEnvVars.value.push({ key: '', value: '' })
+  }
   showEditEnvDialog.value = true
+}
+
+const addVar = () => {
+  editEnvVars.value.push({ key: '', value: '' })
+}
+
+const removeVar = (index) => {
+  editEnvVars.value.splice(index, 1);
 }
 
 const handleLogout = async () => {
@@ -92,6 +122,7 @@ const handleLogout = async () => {
 
 const menuItems = [
   { title: 'Dashboard', icon: 'mdi-view-dashboard', to: '/dashboard' },
+  { title: 'Command Builder', icon: 'mdi-console', to: '/commands' },
   { title: 'Share Secret', icon: 'mdi-lock-plus', to: '/secrets/create' },
 ]
 </script>
@@ -216,7 +247,7 @@ const menuItems = [
 
     <v-dialog v-model="showEditEnvDialog" max-width="400">
       <v-card>
-        <v-card-title>Rename Environment</v-card-title>
+        <v-card-title>Environment Settings</v-card-title>
         <v-card-text>
           <v-text-field
             v-model="editEnvName"
@@ -225,6 +256,37 @@ const menuItems = [
             autofocus
             @keyup.enter="handleUpdateEnv"
           ></v-text-field>
+          
+          <div class="text-subtitle-1 mb-2">Global Variables</div>
+          <p class="text-caption text-grey mb-4">
+            This variables (ex: <span v-pre>{{API_URL}}</span>)will help you to generate faster in Command Builder.
+          </p>
+
+          <div v-for="(variable, index) in editEnvVars" :key="index" class="d-flex align-center mb-2">
+            <v-text-field
+              v-model="variable.key"
+              label="Key (ex: API_URL)"
+              density="compact"
+              variant="outlined"
+              hide-details
+              class="mr-2"
+            ></v-text-field>
+            <v-text-field
+              v-model="variable.value"
+              label="Value (ex: https://...)"
+              density="compact"
+              variant="outlined"
+              hide-details
+              class="mr-2"
+            ></v-text-field>
+            <v-btn icon="mdi-delete" size="small" color="red-lighten-2" variant="text" @click="removeVar(index)"></v-btn>
+          </div>
+
+          <v-btn prepend-icon="mdi-plus" variant="tonal" size="small" block class="mt-2" @click="addVar">
+            Add Variable
+          </v-btn>
+          <v-divider class="mb-4"></v-divider>
+
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>

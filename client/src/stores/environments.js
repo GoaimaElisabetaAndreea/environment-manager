@@ -84,13 +84,15 @@ export const useEnvironmentStore = defineStore('environments', () => {
     }
   }
 
-  async function updateEnvironment(id, newName) {
+  async function updateEnvironment(id, data) {
       try {
         const envRef = doc(db, 'environments', id);
-        await updateDoc(envRef, { name: newName });
+        await updateDoc(envRef, data);
 
         const env = environments.value.find(e => e.id === id);
-        if (env) env.name = newName;
+        if (env){
+          Object.assign(env, data);
+        }
       } catch (e) {
         console.error("Error updating env:", e);
         throw e;
