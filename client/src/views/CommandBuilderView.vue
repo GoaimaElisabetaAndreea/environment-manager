@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useCommandStore } from '@/stores/commands'
 import { useEnvironmentStore } from '@/stores/environments'
 
@@ -9,8 +9,76 @@ const envStore = useEnvironmentStore();
 const showCreateDialog = ref(false);
 const selectedCommand = ref(null);
 const inputValues = ref({});
+const selectedFlags = ref([]);
 
-const selectedFlags = ref([]) ;
+const showSuggestions = ref(false);
+const suggestionFilter = ref('');
+const cursorIndex = ref(0);
+
+const availableVariables = computed(() => {
+  if (!envStore.currentEnvironment?.variables) return [];
+  return Object.keys(envStore.currentEnvironment.variables);
+});
+
+const filteredSuggestions = computed(() => {
+  if (!suggestionFilter.value) return availableVariables.value;
+  return availableVariables.value.filter(v => 
+    v.toLowerCase().includes(suggestionFilter.value.toLowerCase())
+  );
+});
+
+const handleInput = (event) => {
+  const text = newCommand.value.template || '';
+  
+  let cursor = 0;
+  if (event.target && typeof event.target.selectionStart === 'number') {
+    cursor = event.target.selectionStart;
+  }
+  
+  cursorIndex.value = cursor;
+
+  const lastOpenBrace = text.lastIndexOf('{{', cursor - 1);
+  
+  if (lastOpenBrace !== -1) {
+    const closingBrace = text.indexOf('}}', lastOpenBrace);
+    
+    if (closingBrace === -1 || closingBrace >= cursor) {
+      showSuggestions.value = true;
+      suggestionFilter.value = text.substring(lastOpenBrace + 2, cursor);
+    } else {
+      showSuggestions.value = false;
+    }
+  } else {
+    showSuggestions.value = false;
+  }
+};
+
+const insertVariable = (variableName) => {
+  const text = newCommand.value.template;
+  const cursor = cursorIndex.value;
+  
+  const lastOpenBrace = text.lastIndexOf('{{', cursor - 1);
+  
+  if (lastOpenBrace !== -1) {
+    const before = text.substring(0, lastOpenBrace);
+    const after = text.substring(cursor);
+    
+    const newText = `${before}{{${variableName}}}${after}`;
+    newCommand.value.template = newText;
+    
+    showSuggestions.value = false;
+    suggestionFilter.value = '';
+
+    nextTick(() => {
+      const textarea = document.getElementById('template-input');
+      if(textarea) {
+        textarea.focus();
+        const newCursorPos = lastOpenBrace + 2 + variableName.length + 2;
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    });
+  }
+};
 
 const commonFlags = [
   { label: 'Include Headers (-i)', value: '-i' },
@@ -209,15 +277,85 @@ const handleDelete = async (id) => {
         <v-card-text>
           <v-text-field v-model="newCommand.title" label="Title" variant="outlined"></v-text-field>
           <v-text-field v-model="newCommand.description" label="Description" variant="outlined"></v-text-field>
-          <v-textarea 
-            v-model="newCommand.template" 
-            label="Template" 
-            variant="outlined"
-            hint="Use {{variable_name}} as a dynamic field."
-            persistent-hint
-            rows="4"
-            class="font-monospace"
-          ></v-textarea>
+          
+          <div class="position-relative mt-2">
+            <v-textarea 
+              id="template-input"
+              v-model="newCommand.template" 
+              label="Template" 
+              variant="outlined"
+              hint="Type {{ to trigger variable autocomplete."
+              persistent-hint
+              rows="4"
+              class="font-monospace"
+              @input="handleInput"
+              @click="handleInput"
+              @keyup="handleInput"
+            ></v-textarea>
+
+            <v-menu
+              v-model="showSuggestions"
+              activator="#template-input"
+              :close-on-content-click="false"
+              max-height="200"
+              offset="5"
+            >
+              <v-card class="elevation-4">
+                <v-list density="compact">
+                  <v-list-subheader class="text-uppercase text-caption font-weight-bold">
+                    Sugestii ({{filteredSuggestions.length}})
+                  </v-list-subheader>
+                  
+                  <template v-if="filteredSuggestions.length > 0">
+                    <v-list-item
+                      v-for="item in filteredSuggestions"
+                      :key="item"
+                      :value="item"
+                      @click="insertVariable(item)"
+                      prepend-icon="mdi-variable"
+                      color="primary"
+                    >
+                      <v-list-item-title>{{ item }}</v-list-item-title>
+                      <v-list-item-subtitle class="text-caption">
+                        {{ envStore.currentEnvironment?.variables[item]?.substring(0, 30) }}...
+                      </v-list-item-subtitle>
+                    </v-list-item>
+                  </template>
+                  
+                  <v-list-item v-else>
+                    <v-list-item-title class="text-grey text-caption font-italic">
+                      No matching variables found
+                    </v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-card>
+            </v-menu>
+          </div>
+
+          <div class="mt-4 pa-3 bg-grey-lighten-4 rounded border" v-if="envStore.currentEnvId">
+            <div class="text-caption text-grey-darken-2 mb-2 font-weight-bold d-flex align-center">
+              <v-icon size="small" icon="mdi-information-outline" class="mr-1"></v-icon>
+              Available Variables in {{ envStore.currentEnvironment?.name }}:
+            </div>
+            
+            <div v-if="availableVariables.length > 0" class="d-flex flex-wrap" style="gap: 8px;">
+                <v-chip 
+                    v-for="key in availableVariables" 
+                    :key="key"
+                    size="x-small" 
+                    variant="flat"
+                    color="primary"
+                    @click="insertVariable(key)"
+                    class="font-weight-medium"
+                >
+                    {{ key }}
+                </v-chip>
+            </div>
+            <div v-else class="text-caption text-grey font-italic">
+                No variables defined in this environment settings.
+            </div>
+          </div>
+
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
