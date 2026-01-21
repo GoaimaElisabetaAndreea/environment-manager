@@ -48,6 +48,7 @@ export const useEnvironmentStore = defineStore('environments', () => {
       const docRef = await addDoc(collection(db, 'environments'), {
         name: name,
         userId: auth.currentUser.uid,
+        quickLinks: [],
         createdAt: serverTimestamp()
       });
 
@@ -108,6 +109,44 @@ export const useEnvironmentStore = defineStore('environments', () => {
     }
   }
 
+  async function addQuickLink(envId, linkData){
+    const env = environments.value.find(e => e.id == envId);
+
+    if(!env) return;
+
+    const currentLinks = env.quickLinks ? [...env.quickLinks] : [];
+
+    currentLinks.push(linkData);
+    try {
+      const envRef = doc(db, 'environments', envId);
+      await updateDoc(envRef, {quickLinks: currentLinks});
+
+      env.quickLinks = currentLinks;
+    } catch (e) {
+      console.error("Error adding link:", e);
+      throw e;
+    }
+  }
+
+
+  async function removeQuickLink(envId, linkIndex) {
+    const env = environments.value.find(e => e.id === envId);
+    if (!env || !env.quickLinks) return;
+
+    const currentLinks = [...env.quickLinks];
+    currentLinks.splice(linkIndex, 1);
+
+    try {
+      const envRef = doc(db, 'environments', envId);
+      await updateDoc(envRef, { quickLinks: currentLinks });
+      
+      env.quickLinks = currentLinks;
+    } catch (e) {
+      console.error("Error removing link:", e);
+      throw e;
+    }
+  }
+
   return { 
     environments, 
     currentEnvId, 
@@ -117,6 +156,8 @@ export const useEnvironmentStore = defineStore('environments', () => {
     addEnvironment, 
     deleteEnvironment,
     updateEnvironment,
-    selectEnvironment 
+    selectEnvironment,
+    addQuickLink,
+    removeQuickLink 
   };
 });

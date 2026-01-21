@@ -52,7 +52,7 @@ const copyToClipboard = () => {
 
 <template>
     <v-card class="mx-auto" max-width="600">
-        <v-card-title class="bg-primary text-white">Create Secure Secret</v-card-title>
+        <v-card-title class="bg-primary text-white">Share Secret</v-card-title>
         
         <v-card-text class="pt-4">
             <template v-if="!generatedLink">

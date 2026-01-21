@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useCommandStore } from '@/stores/commands'
 import { useEnvironmentStore } from '@/stores/environments'
+import curlFlags from '@/assets/curl-flags.json'
 
 const commandStore = useCommandStore();
 const envStore = useEnvironmentStore();
@@ -80,7 +81,7 @@ const insertVariable = (variableName) => {
   }
 };
 
-const commonFlags = [
+const commonFlags = curlFlags.length > 0 ? curlFlags : [
   { label: 'Include Headers (-i)', value: '-i' },
   { label: 'Verbose (-v)', value: '-v' },
   { label: 'Insecure (-k)', value: '-k' },
@@ -91,7 +92,8 @@ const commonFlags = [
 const newCommand = ref({
   title: '',
   description: '',
-  template: 'curl -X POST https://api.example.com/users/{{userId}}/reset-password'
+  template: 'curl -X POST https://api.example.com/users/{{userId}}/reset-password',
+  flags: []
 });
 
 onMounted(() => {
@@ -144,13 +146,13 @@ const handleCreate = async () => {
  
   await commandStore.addCommand({ ...newCommand.value });
   showCreateDialog.value = false;
-  newCommand.value = { title: '', description: '', template: '' };
+  newCommand.value = { title: '', description: '', template: '', flags:[] };
 }
 
 const selectCmd = (cmd) => {
   selectedCommand.value = cmd;
   inputValues.value = {}; 
-  selectedFlags.value = [];
+  selectedFlags.value = cmd.flags || [];
 }
 
 const copyToClipboard = () => {
@@ -164,6 +166,16 @@ const handleDelete = async (id) => {
     if (selectedCommand.value?.id === id) selectedCommand.value = null
   }
 }
+
+const preview = computed( () => {
+  let cmd = newCommand.value.template || '';
+
+  const matches = cmd.match(/\{\{(.*?)\}\}/g)
+
+  if(newCommand.flags.length > 0){
+    
+  }
+})
 </script>
 
 <template>
@@ -229,7 +241,7 @@ const handleDelete = async (id) => {
 
             <v-divider class="my-4"></v-divider>
             <div class="mb-4">
-                <v-select
+                <v-autocomplete
                     v-model="selectedFlags"
                     :items="commonFlags"
                     item-title="label"
@@ -242,7 +254,7 @@ const handleDelete = async (id) => {
                     clearable
                     chips
                     closable-chips
-                ></v-select>
+                ></v-autocomplete>
             </div>
             <v-divider class="my-4"></v-divider>
 
@@ -278,6 +290,20 @@ const handleDelete = async (id) => {
           <v-text-field v-model="newCommand.title" label="Title" variant="outlined"></v-text-field>
           <v-text-field v-model="newCommand.description" label="Description" variant="outlined"></v-text-field>
           
+          <v-autocomplete
+          v-model="newCommand.flags"
+          :items="commonFlags"
+          item-title="label"
+          item-value="value"
+          label="Flags"
+          multiple
+          chips
+          closable-chips
+          variant="outlined"
+          density="compact"
+          class="mt-2"
+          ></v-autocomplete>
+
           <div class="position-relative mt-2">
             <v-textarea 
               id="template-input"
