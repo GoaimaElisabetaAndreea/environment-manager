@@ -5,6 +5,7 @@ import RegisterView from '../views/RegisterView.vue';
 import SecretCreateView from '../views/SecretCreateView.vue' 
 import SecretReadView from '../views/SecretReadView.vue'
 import CommandBuilderView from '../views/CommandBuilderView.vue'
+import SshKeyManagerView from '../views/SshKeyManagerView.vue';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -39,7 +40,11 @@ const router = createRouter({
       name: 'commands',
       component: CommandBuilderView
     },
-
+    {
+      path: '/ssh-keys',
+      name: 'ssh-keys',
+      component: SshKeyManagerView
+    },
   ]
 });
 
