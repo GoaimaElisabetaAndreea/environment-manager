@@ -1,4 +1,27 @@
 const { db } = require('../config/firebase');
+const crypto = require('crypto');
+const net = require('net');
+const ALGORITHM = 'aes-256-cbc';
+const SECRET_KEY = crypto.createHash('sha256').update(process.env.ENCRYPTION_KEY || 'default_secret').digest();
+const IV_LENGTH = 16;
+
+function encrypt(text) {
+    const iv = crypto.randomBytes(IV_LENGTH);
+    const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(SECRET_KEY), iv);
+    let encrypted = cipher.update(text);
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    return iv.toString('hex') + ':' + encrypted.toString('hex');
+}
+
+function decrypt(text) {
+    const textParts = text.split(':');
+    const iv = Buffer.from(textParts.shift(), 'hex');
+    const encryptedText = Buffer.from(textParts.join(':'), 'hex');
+    const decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(SECRET_KEY), iv);
+    let decrypted = decipher.update(encryptedText);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return decrypted.toString();
+}
 
 const createKey = async (req, res) => {
     try {
@@ -8,16 +31,17 @@ const createKey = async (req, res) => {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
+        const encryptedValue = encrypt(value);
         const newKey = {
             title,
-            value,
+            value: encryptedValue,
             envId,
             userId: req.user.uid, 
             createdAt: new Date().toISOString()
         };
 
         const docRef = await db.collection('ssh_keys').add(newKey);
-        res.status(201).json({ id: docRef.id, ...newKey });
+        res.status(201).json({ id: docRef.id, ...newKey, value: value });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -33,7 +57,14 @@ const getKeysByEnv = async (req, res) => {
 
         const keys = [];
         snapshot.forEach(doc => {
-            keys.push({ id: doc.id, ...doc.data() });
+            const data = doc.data();
+            try {
+                data.value = data.value.includes(':') ? decrypt(data.value) : data.value;
+            } catch (e) {
+                console.error("Decryption failed for doc", doc.id);
+                data.value = "[Error Decrypting]";
+            }
+            keys.push({ id: doc.id, ...data });
         });
 
         res.status(200).json(keys);
@@ -63,4 +94,38 @@ const deleteKey = async (req, res) => {
     }
 };
 
-module.exports = { createKey, getKeysByEnv, deleteKey };
+const testConnection = async (req, res) => {
+    const { host, port } = req.body;
+
+    if(!host) return res.status(400).json({error: 'Host required'});
+
+    const targetPort = port || 22;
+    const timeout = 3000; // 3 secunde timeout
+
+    const socket = new net.Socket();
+    let status = 'closed';
+
+    socket.setTimeout(timeout);
+
+    socket.on('connect', () => {
+        status = 'open';
+        socket.destroy();
+    });
+
+    socket.on('timeout', () => {
+        status = 'timeout';
+        socket.destroy();
+    });
+
+    socket.on('error', (err) => {
+        status = 'error';
+    });
+
+    socket.on('close', () => {
+        res.json({ host, port: targetPort, status });
+    });
+
+    socket.connect(targetPort, host);
+};
+
+module.exports = { createKey, getKeysByEnv, deleteKey, testConnection };

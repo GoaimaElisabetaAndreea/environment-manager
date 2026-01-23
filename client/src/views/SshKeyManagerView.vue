@@ -45,6 +45,29 @@ const handleDelete = async (id) => {
         await sshStore.deleteKey(id);
     }
 };
+
+const testingId = ref(null);
+
+const runTest = async (key) => {
+    testingId.value = key.id;
+    const result = await sshStore.testConnection(key.value);
+    
+    key.lastStatus = result.status; 
+    testingId.value = null;
+}
+
+const getConnectionColor = (status) => {
+    if (status === 'open') return 'success';
+    if (status === 'timeout' || status === 'error') return 'error';
+    return 'grey';
+}
+
+const getConnectionText = (status) => {
+    if (status === 'open') return 'Online (Port 22)';
+    if (status === 'timeout') return 'Timeout';
+    if (status === 'error') return 'Connection Failed';
+    return 'Test Connectivity';
+}
 </script>
 
 <template>
@@ -102,6 +125,29 @@ const handleDelete = async (id) => {
                     <v-btn variant="text" @click="showDialog = false">Cancel</v-btn>
                     <v-btn color="primary" @click="handleCreate" :loading="creating">Save</v-btn>
                 </v-card-actions>
+                <v-card-actions>
+    <v-btn 
+        block 
+        variant="tonal" 
+        color="primary" 
+        prepend-icon="mdi-content-copy" 
+        @click="copyString(key.value)"
+        class="mb-2"
+    >
+        Copy String
+    </v-btn>
+    
+    <v-btn 
+        block 
+        variant="outlined" 
+        size="small"
+        :loading="testingId === key.id"
+        @click="runTest(key)"
+        :color="getConnectionColor(key.lastStatus)"
+    >
+        {{ getConnectionText(key.lastStatus) }}
+    </v-btn>
+</v-card-actions>
             </v-card>
         </v-dialog>
     </v-container>

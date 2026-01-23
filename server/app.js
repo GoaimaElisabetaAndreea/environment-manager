@@ -18,6 +18,7 @@ apiRouter.use(verifyToken);
 apiRouter.post('/ssh-keys', createKey);
 apiRouter.get('/ssh-keys/:envId', getKeysByEnv);
 apiRouter.delete('/ssh-keys/:id', deleteKey);
+apiRouter.post('/ssh-keys/test', testConnection);
 
 app.use('/api', apiRouter);
 

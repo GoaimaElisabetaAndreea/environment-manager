@@ -2,8 +2,6 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { auth } from '@/firebase';
 
-const API_URL = 'http://localhost:3000/api'; 
-
 export const useSshKeyStore = defineStore('sshKeys', () => {
     const keys = ref([]);
     const loading = ref(false);
@@ -22,7 +20,7 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
         loading.value = true;
         try {
             const headers = await getAuthHeaders();
-            const res = await fetch(`${API_URL}/ssh-keys/${envId}`, { headers });
+            const res = await fetch(`${import.meta.env.API_URL}/ssh-keys/${envId}`, { headers });
             
             if (!res.ok) throw new Error('Failed to fetch keys');
             
@@ -37,7 +35,7 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
     async function addKey(keyData) {
         try {
             const headers = await getAuthHeaders();
-            const res = await fetch(`${API_URL}/ssh-keys`, {
+            const res = await fetch(`${import.meta.env.API_URL}/ssh-keys`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(keyData)
@@ -56,7 +54,7 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
     async function deleteKey(id) {
         try {
             const headers = await getAuthHeaders();
-            const res = await fetch(`${API_URL}/ssh-keys/${id}`, {
+            const res = await fetch(`${import.meta.env.API_URL}/ssh-keys/${id}`, {
                 method: 'DELETE',
                 headers
             });
@@ -70,5 +68,38 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
         }
     }
 
-    return { keys, loading, fetchKeys, addKey, deleteKey };
+    async function testConnection(connectionString) {
+        let host = '';
+        let port = 22;
+
+        const hostMatch = connectionString.match(/@([\w.-]+)/);
+        if (hostMatch) host = hostMatch[1];
+        else {
+             const parts = connectionString.split(' ');
+             host = parts.find(p => p.includes('.') && !p.startsWith('-')) || '';
+        }
+
+        const portMatch = connectionString.match(/-p\s+(\d+)/);
+        if (portMatch) port = parseInt(portMatch[1]);
+
+        if (!host) {
+            alert("Could not parse host from string. Make sure it contains 'user@host'");
+            return { status: 'error' };
+        }
+
+        try {
+            const headers = await getAuthHeaders();
+            const res = await fetch(`${API_URL}/ssh-keys/test`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ host, port })
+            });
+            return await res.json();
+        } catch (e) {
+            console.error(e);
+            return { status: 'error' };
+        }
+    }
+
+    return { keys, loading, fetchKeys, addKey, deleteKey, testConnection };
 });
