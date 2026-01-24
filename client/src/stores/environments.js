@@ -1,31 +1,38 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { db, auth } from '../firebase';
-import { collection, addDoc, query, where, getDocs, serverTimestamp, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { auth } from '../firebase'; 
 
 export const useEnvironmentStore = defineStore('environments', () => {
   const environments = ref([]) 
   const currentEnvId = ref(localStorage.getItem('currentEnvId') || null);
   const loading = ref(false);
+  
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
   const currentEnvironment = computed(() => 
     environments.value.find(env => env.id === currentEnvId.value)
   )
 
+  const getAuthHeaders = async () => {
+      if (!auth.currentUser) throw new Error("User not logged in");
+      const token = await auth.currentUser.getIdToken();
+      return {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+      };
+  };
+
   async function fetchEnvironments() {
     if (!auth.currentUser) return; 
+    loading.value = true;
 
     try{
-      const q = query(
-        collection(db, 'environments'),
-        where('userId', '==', auth.currentUser.uid)
-      );
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_URL}/environments`, { headers });
+      
+      if(!res.ok) throw new Error("Failed to fetch environments");
 
-      const querySnapshot = await getDocs(q);
-      environments.value = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
+      environments.value = await res.json();
 
       if (!currentEnvId.value && environments.value.length > 0) {
         selectEnvironment(environments.value[0].id)
@@ -42,22 +49,21 @@ export const useEnvironmentStore = defineStore('environments', () => {
   }
 
   async function addEnvironment(name) {
-    if (!auth.currentUser) return
-
     try{
-      const docRef = await addDoc(collection(db, 'environments'), {
-        name: name,
-        userId: auth.currentUser.uid,
-        quickLinks: [],
-        createdAt: serverTimestamp()
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_URL}/environments`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ name })
       });
 
-      const newEnv = { id: docRef.id, name, userId: auth.currentUser.uid };
-      environments.value.push(newEnv);
+      if(!res.ok) throw new Error("Failed to create env");
 
-      selectEnvironment(docRef.id)
+      const newEnv = await res.json();
+      environments.value.push(newEnv);
+      selectEnvironment(newEnv.id)
       
-      return docRef.id
+      return newEnv.id
     } catch(e){
       console.error("Error trying to create new env: ", e);
       throw e;
@@ -68,7 +74,13 @@ export const useEnvironmentStore = defineStore('environments', () => {
     if(!confirm("Are you sure you want to delete this?")) return;
 
     try{
-      await deleteDoc(doc(db, 'environments', id));
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_URL}/environments/${id}`, {
+          method: 'DELETE',
+          headers
+      });
+
+      if(!res.ok) throw new Error("Failed to delete env");
 
       environments.value = environments.value.filter(e => e.id !== id);
 
@@ -87,8 +99,14 @@ export const useEnvironmentStore = defineStore('environments', () => {
 
   async function updateEnvironment(id, data) {
       try {
-        const envRef = doc(db, 'environments', id);
-        await updateDoc(envRef, data);
+        const headers = await getAuthHeaders();
+        const res = await fetch(`${API_URL}/environments/${id}`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify(data)
+        });
+
+        if(!res.ok) throw new Error("Failed to update env");
 
         const env = environments.value.find(e => e.id === id);
         if (env){
@@ -111,23 +129,13 @@ export const useEnvironmentStore = defineStore('environments', () => {
 
   async function addQuickLink(envId, linkData){
     const env = environments.value.find(e => e.id == envId);
-
     if(!env) return;
 
     const currentLinks = env.quickLinks ? [...env.quickLinks] : [];
-
     currentLinks.push(linkData);
-    try {
-      const envRef = doc(db, 'environments', envId);
-      await updateDoc(envRef, {quickLinks: currentLinks});
-
-      env.quickLinks = currentLinks;
-    } catch (e) {
-      console.error("Error adding link:", e);
-      throw e;
-    }
+    
+    await updateEnvironment(envId, { quickLinks: currentLinks });
   }
-
 
   async function removeQuickLink(envId, linkIndex) {
     const env = environments.value.find(e => e.id === envId);
@@ -136,15 +144,7 @@ export const useEnvironmentStore = defineStore('environments', () => {
     const currentLinks = [...env.quickLinks];
     currentLinks.splice(linkIndex, 1);
 
-    try {
-      const envRef = doc(db, 'environments', envId);
-      await updateDoc(envRef, { quickLinks: currentLinks });
-      
-      env.quickLinks = currentLinks;
-    } catch (e) {
-      console.error("Error removing link:", e);
-      throw e;
-    }
+    await updateEnvironment(envId, { quickLinks: currentLinks });
   }
 
   return { 

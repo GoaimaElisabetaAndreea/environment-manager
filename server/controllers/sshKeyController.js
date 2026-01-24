@@ -100,7 +100,7 @@ const testConnection = async (req, res) => {
     if(!host) return res.status(400).json({error: 'Host required'});
 
     const targetPort = port || 22;
-    const timeout = 3000; // 3 secunde timeout
+    const timeout = 3000; 
 
     const socket = new net.Socket();
     let status = 'closed';

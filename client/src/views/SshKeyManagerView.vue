@@ -2,22 +2,29 @@
 import { ref, onMounted, watch } from 'vue';
 import { useSshKeyStore } from '@/stores/sshKeys';
 import { useEnvironmentStore } from '@/stores/environments';
+import { useAuthStore } from '@/stores/auth'; 
 
 const sshStore = useSshKeyStore();
 const envStore = useEnvironmentStore();
+const authStore = useAuthStore(); 
 
 const showDialog = ref(false);
 const newKey = ref({ title: '', value: '' });
 const creating = ref(false);
+const activeTab = ref('preview');
 
 const loadKeys = () => {
-    if (envStore.currentEnvId) {
+    if (envStore.currentEnvId && authStore.user) {
         sshStore.fetchKeys(envStore.currentEnvId);
     }
 };
 
 onMounted(loadKeys);
+
 watch(() => envStore.currentEnvId, loadKeys);
+watch(() => authStore.user, (newUser) => {
+    if (newUser) loadKeys();
+});
 
 const handleCreate = async () => {
     if (!newKey.value.title || !newKey.value.value) return;
@@ -68,94 +75,124 @@ const getConnectionText = (status) => {
     if (status === 'error') return 'Connection Failed';
     return 'Test Connectivity';
 }
+
+const installCommand = computed(() => {
+    if (!generatedConfig.value) return '';
+    return `printf "\\n${generatedConfig.value.replace(/\n/g, '\\n')}" >> ~/.ssh/config`;
+});
+
+const copyInstallCommand = () => {
+    navigator.clipboard.writeText(installCommand.value);
+    alert("Command copied! Paste it in your terminal to append to config.");
+}
+
+const openConfigGenerator = (key) => {
+    const rawString = key.value; 
+    
+    const hostAlias = key.title.toLowerCase().replace(/[^a-z0-9]/g, '-');
+
+    let hostName = '';
+    let user = '';
+    let port = '';
+    let identityFile = '';
+
+    const parts = rawString.split(' ');
+
+    const connectionPart = parts.find(p => !p.startsWith('-') && (p.includes('@') || p.includes('.')));
+    if (connectionPart) {
+        if (connectionPart.includes('@')) {
+            [user, hostName] = connectionPart.split('@');
+        } else {
+            hostName = connectionPart;
+        }
+    }
+
+    const portIndex = parts.indexOf('-p');
+    if (portIndex !== -1 && parts[portIndex+1]) port = parts[portIndex+1];
+
+    const idIndex = parts.indexOf('-i');
+    if (idIndex !== -1 && parts[idIndex+1]) identityFile = parts[idIndex+1];
+
+    let configBlock = `Host ${hostAlias}\n`;
+    if (hostName) configBlock += `    HostName ${hostName}\n`;
+    if (user) configBlock += `    User ${user}\n`;
+    if (port) configBlock += `    Port ${port}\n`;
+    if (identityFile) configBlock += `    IdentityFile ${identityFile}\n`;
+    else configBlock += `    # IdentityFile ~/.ssh/id_rsa\n`;
+
+    generatedConfig.value = configBlock;
+    showConfigDialog.value = true;
+}
+
+const copyConfig = () => {
+    navigator.clipboard.writeText(generatedConfig.value);
+    alert("Config copied! Paste it into ~/.ssh/config");
+    showConfigDialog.value = false;
+}
 </script>
 
+
 <template>
-    <v-container>
-        <div class="d-flex justify-space-between align-center mb-4">
-            <h2 class="text-h5">SSH Key Manager</h2>
-            <v-btn color="primary" prepend-icon="mdi-plus" @click="showDialog = true">
-                Add Key
-            </v-btn>
-        </div>
+    <v-dialog v-model="showConfigDialog" max-width="700">
+        <v-card>
+            <v-card-title class="bg-grey-darken-3 text-white d-flex align-center">
+                <v-icon icon="mdi-console" class="mr-2"></v-icon>
+                SSH Config Helper
+            </v-card-title>
 
-        <div v-if="!envStore.currentEnvId" class="text-center text-grey mt-10">
-            Please select an environment first.
-        </div>
+            <v-tabs v-model="activeTab" bg-color="grey-lighten-2">
+                <v-tab value="preview">Preview File</v-tab>
+                <v-tab value="command">One-Liner Install</v-tab>
+            </v-tabs>
 
-        <v-row v-else>
-            <v-col cols="12" md="6" lg="4" v-for="key in sshStore.keys" :key="key.id">
-                <v-card border elevation="2">
-                    <v-card-title class="d-flex justify-space-between text-subtitle-1 font-weight-bold">
-                        {{ key.title }}
-                        <v-btn icon="mdi-delete" size="x-small" variant="text" color="red" @click="handleDelete(key.id)"></v-btn>
-                    </v-card-title>
-                    <v-card-text class="bg-grey-lighten-4 pa-3 ma-2 rounded font-monospace text-caption">
-                        {{ key.value }}
-                    </v-card-text>
-                    <v-card-actions>
-                        <v-btn block variant="tonal" color="primary" prepend-icon="mdi-content-copy" @click="copyString(key.value)">
-                            Copy String
+            <v-card-text class="pt-4">
+                <v-window v-model="activeTab">
+                    <v-window-item value="preview">
+                        <p class="mb-2 text-body-2">Copy this block into <code>~/.ssh/config</code>:</p>
+                        <v-textarea
+                            v-model="generatedConfig"
+                            readonly
+                            variant="outlined"
+                            bg-color="grey-lighten-5"
+                            class="font-monospace"
+                            rows="6"
+                            hide-details
+                        ></v-textarea>
+                        <v-btn 
+                            block 
+                            color="secondary" 
+                            variant="tonal" 
+                            class="mt-2" 
+                            prepend-icon="mdi-content-copy" 
+                            @click="copyConfig"
+                        >
+                            Copy Config Text
                         </v-btn>
-                    </v-card-actions>
-                </v-card>
-            </v-col>
-            
-            <v-col v-if="sshStore.keys.length === 0" cols="12" class="text-center text-grey">
-                <v-icon size="64" class="mb-2">mdi-key-variant-off</v-icon>
-                <p>No SSH keys found for this environment.</p>
-            </v-col>
-        </v-row>
+                    </v-window-item>
 
-        <v-dialog v-model="showDialog" max-width="500">
-            <v-card>
-                <v-card-title>Add SSH Connection</v-card-title>
-                <v-card-text>
-                    <v-text-field label="Title (e.g. Web Server)" v-model="newKey.title" variant="outlined"></v-text-field>
-                    <v-textarea 
-                        label="Connection String / Key" 
-                        v-model="newKey.value" 
-                        variant="outlined" 
-                        placeholder="ssh user@192.168.1.1 -p 22"
-                        rows="3"
-                    ></v-textarea>
-                </v-card-text>
-                <v-card-actions>
-                    <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="showDialog = false">Cancel</v-btn>
-                    <v-btn color="primary" @click="handleCreate" :loading="creating">Save</v-btn>
-                </v-card-actions>
-                <v-card-actions>
-    <v-btn 
-        block 
-        variant="tonal" 
-        color="primary" 
-        prepend-icon="mdi-content-copy" 
-        @click="copyString(key.value)"
-        class="mb-2"
-    >
-        Copy String
-    </v-btn>
-    
-    <v-btn 
-        block 
-        variant="outlined" 
-        size="small"
-        :loading="testingId === key.id"
-        @click="runTest(key)"
-        :color="getConnectionColor(key.lastStatus)"
-    >
-        {{ getConnectionText(key.lastStatus) }}
-    </v-btn>
-</v-card-actions>
-            </v-card>
-        </v-dialog>
-    </v-container>
+                    <v-window-item value="command">
+                        <v-alert type="info" variant="tonal" density="compact" class="mb-2">
+                            Run this command in your terminal to automatically append this host to your config.
+                        </v-alert>
+                        <div class="bg-black pa-3 rounded font-monospace text-caption mb-2">
+                            {{ installCommand }}
+                        </div>
+                        <v-btn 
+                            block 
+                            color="primary" 
+                            prepend-icon="mdi-terminal" 
+                            @click="copyInstallCommand"
+                        >
+                            Copy Terminal Command
+                        </v-btn>
+                    </v-window-item>
+                </v-window>
+            </v-card-text>
+
+            <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn variant="text" @click="showConfigDialog = false">Close</v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
 </template>
-
-<style scoped>
-.font-monospace {
-    font-family: monospace;
-    word-break: break-all;
-}
-</style>

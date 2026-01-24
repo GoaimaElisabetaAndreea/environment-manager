@@ -5,6 +5,7 @@ import { auth } from '@/firebase';
 export const useSshKeyStore = defineStore('sshKeys', () => {
     const keys = ref([]);
     const loading = ref(false);
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
     const getAuthHeaders = async () => {
         if (!auth.currentUser) throw new Error("User not logged in");
@@ -17,10 +18,12 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
 
     async function fetchKeys(envId) {
         if (!envId) return;
+        if(!auth.currentUser) return; 
+        
         loading.value = true;
         try {
             const headers = await getAuthHeaders();
-            const res = await fetch(`${import.meta.env.API_URL}/ssh-keys/${envId}`, { headers });
+            const res = await fetch(`${API_URL}/ssh-keys/${envId}`, { headers });
             
             if (!res.ok) throw new Error('Failed to fetch keys');
             
@@ -35,7 +38,7 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
     async function addKey(keyData) {
         try {
             const headers = await getAuthHeaders();
-            const res = await fetch(`${import.meta.env.API_URL}/ssh-keys`, {
+            const res = await fetch(`${API_URL}/ssh-keys`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(keyData)
@@ -54,7 +57,7 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
     async function deleteKey(id) {
         try {
             const headers = await getAuthHeaders();
-            const res = await fetch(`${import.meta.env.API_URL}/ssh-keys/${id}`, {
+            const res = await fetch(`${API_URL}/ssh-keys/${id}`, {
                 method: 'DELETE',
                 headers
             });
