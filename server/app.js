@@ -3,10 +3,11 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const verifyToken = require('./middleware/authMiddleware'); 
-const { createKey, getKeysByEnv, deleteKey, testConnection } = require('./controllers/sshKeyController'); 
+const { createKey, getKeysByEnv, deleteKey, testConnection, updateKey } = require('./controllers/sshKeyController'); 
 const { getEnvironments, createEnvironments, updateEnvironment, deleteEnvironment } = require('./controllers/environmentController');
-const { getCommands, createCommand, deleteCommand } = require('./controllers/commandController');
+const { getCommands, createCommand, updateCommand, deleteCommand } = require('./controllers/commandController');
 const { createSecret, getSecretMetaData, revealSecret } = require('./controllers/secretController');
+const { checkUrlStatus } = require('./controllers/statusController');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -26,18 +27,22 @@ apiRouter.use(verifyToken);
 apiRouter.post('/ssh-keys', createKey);
 apiRouter.get('/ssh-keys/:envId', getKeysByEnv);
 apiRouter.delete('/ssh-keys/:id', deleteKey);
+apiRouter.put('/ssh-keys/:id', updateKey)
 apiRouter.post('/ssh-keys/test', testConnection);
 
-apiRouter.get('/environment', getEnvironments);
-apiRouter.post('/environment', createEnvironments);
-apiRouter.put('/environment/:id', updateEnvironment);
-apiRouter.delete('/environment/:id', deleteEnvironment);
+apiRouter.get('/environments', getEnvironments);
+apiRouter.post('/environments', createEnvironments);
+apiRouter.put('/environments/:id', updateEnvironment);
+apiRouter.delete('/environments/:id', deleteEnvironment);
 
 apiRouter.get('/commands', getCommands); 
 apiRouter.post('/commands', createCommand);
+apiRouter.put('/commands/:id', updateCommand);
 apiRouter.delete('/commands/:id', deleteCommand);
 
 apiRouter.post('/secrets', createSecret);
+
+apiRouter.post('/status/check', checkUrlStatus);
 
 app.use('/api', apiRouter);
 

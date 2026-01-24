@@ -1,99 +1,89 @@
 <script setup>
 import { ref } from 'vue';
-import { useAuthStore } from '../stores/auth.js';
+import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
-
-const email = ref('');
-const password = ref('');
-const confirmPassword = ref('');
-const loading = ref(false);
-const errorMessage = ref('');
 
 const authStore = useAuthStore();
 const router = useRouter();
 
+const email = ref('');
+const password = ref('');
+const loading = ref(false);
+
 const handleRegister = async () => {
-    if(password.value != confirmPassword.value){
-        errorMessage.value = "Password and confirm password should have the same value";
-        return;
-    }
+    if (!email.value || !password.value) return;
 
     loading.value = true;
-    errorMessage.value = '';
-    try{
+    try {
         await authStore.register(email.value, password.value);
-        router.push('/dashboard');
-    } catch(error){
-        if(error.code === 'auth/email-already-in-use'){
-            errorMessage.value = "This email is taken";
-        } else if(error.code === 'auth/weak-password'){
-            errorMessage.value = "Password needs to have at least 6 characters";
-        } else {
-            errorMessage.value = "Registration failed";
-        }
-    } finally{
+        router.push('/');
+    } catch (e) {
+        alert("Registration failed: " + e.message);
+    } finally {
         loading.value = false;
     }
-}
+};
 </script>
 
 <template>
-  <v-container class="fill-height" fluid>
-    <v-row align="center" justify="center">
-      <v-col cols="12" sm="8" md="4">
-        <v-card class="elevation-12">
-          <v-toolbar color="primary" dark flat>
-            <v-toolbar-title>Create an account</v-toolbar-title>
-          </v-toolbar>
-          <v-card-text>
-            <v-form @submit.prevent="handleRegister">
-              <v-text-field
-                v-model="email"
-                label="Email"
-                prepend-icon="mdi-email"
-                type="email"
-                required
-              ></v-text-field>
-              
-              <v-text-field
-                v-model="password"
-                label="Password"
-                prepend-icon="mdi-lock"
-                type="password"
-                required
-              ></v-text-field>
+    <v-container class="fill-height bg-grey-lighten-3" fluid>
+        <v-row align="center" justify="center">
+            <v-col cols="12" sm="8" md="4">
+                <v-card class="elevation-12 rounded-lg">
+                    <div class="bg-primary pa-4 text-center">
+                         <v-icon size="48" color="white">mdi-account-plus</v-icon>
+                         <h2 class="text-white text-h5 font-weight-bold mt-2">Create Account</h2>
+                    </div>
+                    
+                    <v-card-text class="pt-6">
+                        <v-form @submit.prevent="handleRegister">
+                            <v-text-field
+                                v-model="email"
+                                label="Email Address"
+                                prepend-inner-icon="mdi-email"
+                                type="email"
+                                variant="outlined"
+                                density="comfortable"
+                                color="primary"
+                            ></v-text-field>
 
-              <v-text-field
-                v-model="confirmPassword"
-                label="Confirm Password"
-                prepend-icon="mdi-lock-check"
-                type="password"
-                required
-              ></v-text-field>
-              
-              <v-alert v-if="errorMessage" type="error" class="mb-3">
-                {{ errorMessage }}
-              </v-alert>
+                            <v-text-field
+                                v-model="password"
+                                label="Password"
+                                prepend-inner-icon="mdi-lock"
+                                type="password"
+                                variant="outlined"
+                                density="comfortable"
+                                color="primary"
+                                class="mt-2"
+                                hint="At least 6 characters"
+                            ></v-text-field>
 
-              <v-btn 
-                type="submit" 
-                color="primary" 
-                block 
-                :loading="loading"
-              >
-                SIGN UP
-              </v-btn>
-            </v-form>
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer></v-spacer>
-            <span class="text-caption mr-2">Do you have an account already?</span>
-            <v-btn variant="text" color="primary" to="/login">
-              Login
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-col>
-    </v-row>
-  </v-container>
+                            <v-btn 
+                                block 
+                                color="primary" 
+                                size="large" 
+                                class="mt-6 font-weight-bold" 
+                                @click="handleRegister" 
+                                :loading="loading"
+                                elevation="2"
+                            >
+                                Register
+                            </v-btn>
+                        </v-form>
+
+                        <div class="text-center mt-6">
+                            <span class="text-grey-darken-1 text-body-2">Already have an account? </span>
+                            <router-link 
+                                to="/login" 
+                                class="text-primary text-decoration-none font-weight-bold text-body-2"
+                            >
+                                Login here
+                            </router-link>
+                        </div>
+                    </v-card-text>
+                </v-card>
+            </v-col>
+        </v-row>
+    </v-container>
 </template>

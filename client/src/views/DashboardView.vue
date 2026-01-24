@@ -1,22 +1,74 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useEnvironmentStore } from '@/stores/environments'
 
 const envStore = useEnvironmentStore()
 
 const showAddLinkDialog = ref(false)
+const isEditing = ref(false)
+const editingIndex = ref(-1)
+
 const newLink = ref({
   title: '',
   url: '',
-  description: ''
+  description: '',
+  username: '',
+  password: ''
 })
 const addingLink = ref(false)
+const showPassword = ref(false)
+
+const linkStatuses = ref({})
+const checkingStatus = ref(false)
 
 const quickLinks = computed(() => {
   return envStore.currentEnvironment?.quickLinks || []
 })
 
-const handleAddLink = async () => {
+const checkAllStatuses = async () => {
+    if (!quickLinks.value.length) return;
+    
+    checkingStatus.value = true;
+    
+    const promises = quickLinks.value.map(async (link) => {
+        if (!linkStatuses.value[link.url]) {
+             linkStatuses.value[link.url] = { status: 'loading' };
+        }
+        
+        const result = await envStore.checkLinkStatus(link.url);
+        linkStatuses.value[link.url] = result;
+    });
+
+    await Promise.all(promises);
+    checkingStatus.value = false;
+}
+
+watch(() => envStore.currentEnvId, () => {
+    linkStatuses.value = {}; 
+    checkAllStatuses();
+});
+
+onMounted(() => {
+    if (envStore.currentEnvId) {
+        checkAllStatuses();
+    }
+});
+
+const openAddDialog = () => {
+  isEditing.value = false;
+  editingIndex.value = -1;
+  newLink.value = { title: '', url: '', description: '', username: '', password: '' };
+  showAddLinkDialog.value = true;
+}
+
+const openEditDialog = (link, index) => {
+  isEditing.value = true;
+  editingIndex.value = index;
+  newLink.value = { ...link };
+  showAddLinkDialog.value = true;
+}
+
+const handleSaveLink = async () => {
   if (!newLink.value.title || !newLink.value.url) return
   
   let formattedUrl = newLink.value.url
@@ -24,17 +76,31 @@ const handleAddLink = async () => {
     formattedUrl = 'https://' + formattedUrl
   }
 
+  const linkPayload = {
+    title: newLink.value.title,
+    url: formattedUrl,
+    description: newLink.value.description,
+    username: newLink.value.username,
+    password: newLink.value.password
+  };
+
   addingLink.value = true
   try {
-    await envStore.addQuickLink(envStore.currentEnvId, {
-      title: newLink.value.title,
-      url: formattedUrl,
-      description: newLink.value.description
-    })
+    if (isEditing.value) {
+      await envStore.updateQuickLink(envStore.currentEnvId, editingIndex.value, linkPayload)
+    } else {
+      await envStore.addQuickLink(envStore.currentEnvId, linkPayload)
+    }
+    
     showAddLinkDialog.value = false
-    newLink.value = { title: '', url: '', description: '' }
+    newLink.value = { title: '', url: '', description: '', username: '', password: '' }
+    
+    envStore.checkLinkStatus(formattedUrl).then(res => {
+        linkStatuses.value[formattedUrl] = res;
+    });
+
   } catch (e) {
-    alert('Failed to add link' + e)
+    alert('Failed to save link: ' + e)
   } finally {
     addingLink.value = false
   }
@@ -46,8 +112,22 @@ const handleDeleteLink = async (index) => {
   }
 }
 
+const handleCardClick = (link) => {
+  if (link.password) {
+    navigator.clipboard.writeText(link.password);
+    alert(`Password for ${link.title} copied to clipboard!`);
+  } else {
+    openLink(link.url);
+  }
+}
+
 const openLink = (url) => {
   window.open(url, '_blank')
+}
+
+const copyUser = (user) => {
+    navigator.clipboard.writeText(user);
+    alert('Username copied!');
 }
 
 const getIcon = (title) => {
@@ -57,6 +137,23 @@ const getIcon = (title) => {
   if (t.includes('grafana') || t.includes('kibana') || t.includes('log')) return 'mdi-chart-box'
   if (t.includes('db') || t.includes('admin') || t.includes('sql')) return 'mdi-database'
   return 'mdi-web'
+}
+
+const getStatusColor = (url) => {
+    const s = linkStatuses.value[url];
+    if (!s) return 'grey-lighten-2'; 
+    if (s.status === 'loading') return 'amber';
+    if (s.status === 'up') return 'green-accent-3';
+    return 'error';
+}
+
+const getStatusText = (url) => {
+    const s = linkStatuses.value[url];
+    if (!s) return 'Unknown';
+    if (s.status === 'loading') return 'Checking...';
+    if (s.status === 'up') return `UP (${s.latency}ms)`;
+    if (s.status === 'timeout') return 'Timeout';
+    return 'DOWN';
 }
 </script>
 
@@ -74,13 +171,26 @@ const getIcon = (title) => {
           <h1 class="text-h4 font-weight-bold text-primary">
             {{ envStore.currentEnvironment.name }}
           </h1>
-          <span class="text-subtitle-1 text-grey">Dashboard & Quick Links</span>
+          <div class="d-flex align-center">
+            <span class="text-subtitle-1 text-grey mr-3">Dashboard & Quick Links</span>
+            
+            <v-btn 
+                size="x-small" 
+                variant="text" 
+                color="grey" 
+                prepend-icon="mdi-refresh"
+                :loading="checkingStatus"
+                @click="checkAllStatuses"
+            >
+                Refresh Status
+            </v-btn>
+          </div>
         </div>
         <v-btn 
           prepend-icon="mdi-plus" 
           color="primary" 
           variant="flat"
-          @click="showAddLinkDialog = true"
+          @click="openAddDialog"
         >
           Add Bookmark
         </v-btn>
@@ -89,31 +199,93 @@ const getIcon = (title) => {
       <v-row>
         <v-col cols="12" sm="6" md="4" lg="3" v-for="(link, index) in quickLinks" :key="index">
           <v-card 
-            class="h-100 d-flex flex-column hover-card" 
+            class="h-100 d-flex flex-column hover-card position-relative" 
             elevation="2"
-            @click="openLink(link.url)"
+            @click="handleCardClick(link)"
             border
+            :ripple="!!link.password"
           >
+            <div class="status-indicator">
+                <v-tooltip location="top">
+                    <template v-slot:activator="{ props }">
+                         <v-badge
+                            v-bind="props"
+                            dot
+                            :color="getStatusColor(link.url)"
+                            class="mr-2 mt-2"
+                         ></v-badge>
+                    </template>
+                    <span>{{ getStatusText(link.url) }}</span>
+                </v-tooltip>
+            </div>
+
             <v-card-item>
               <template v-slot:prepend>
                 <v-avatar color="primary" variant="tonal" rounded>
                   <v-icon :icon="getIcon(link.title)"></v-icon>
                 </v-avatar>
               </template>
-              <v-card-title>{{ link.title }}</v-card-title>
-              <v-card-subtitle v-if="link.description">{{ link.description }}</v-card-subtitle>
-              <v-card-subtitle v-else class="text-truncate">{{ link.url }}</v-card-subtitle>
               
-              <template v-slot:append>
-                <v-btn 
-                  icon="mdi-delete" 
-                  variant="text" 
-                  size="small" 
-                  color="grey"
-                  @click.stop="handleDeleteLink(index)"
-                ></v-btn>
-              </template>
+              <v-card-title class="pr-4">{{ link.title }}</v-card-title>
+              
+              <v-card-subtitle v-if="link.description" class="mb-2">
+                {{ link.description }}
+              </v-card-subtitle>
+              
+              <div v-if="link.username || link.password" class="mt-2 pt-2 border-t">
+                <div v-if="link.username" class="d-flex align-center text-caption text-grey-darken-1 mb-1">
+                    <v-icon size="small" start>mdi-account</v-icon> 
+                    <span class="text-truncate" style="max-width: 120px;">{{ link.username }}</span>
+                    <v-btn 
+                        icon="mdi-content-copy" 
+                        size="x-small" 
+                        variant="text" 
+                        class="ml-1"
+                        title="Copy Username"
+                        @click.stop="copyUser(link.username)"
+                    ></v-btn>
+                </div>
+                <div v-if="link.password" class="d-flex align-center text-caption text-green">
+                    <v-icon size="small" start>mdi-lock</v-icon> 
+                    <span>Click card to copy pass</span>
+                </div>
+              </div>
+              <v-card-subtitle v-else class="text-truncate mt-1 text-caption">
+                  {{ link.url }}
+              </v-card-subtitle>
             </v-card-item>
+
+            <v-spacer></v-spacer>
+
+            <v-card-actions>
+              <v-btn 
+                variant="text" 
+                color="primary" 
+                size="small" 
+                prepend-icon="mdi-open-in-new"
+                @click.stop="openLink(link.url)"
+              >
+                Open
+              </v-btn>
+
+              <v-spacer></v-spacer>
+              
+              <v-btn 
+                icon="mdi-pencil" 
+                variant="text" 
+                size="small" 
+                color="blue"
+                @click.stop="openEditDialog(link, index)"
+              ></v-btn>
+
+              <v-btn 
+                icon="mdi-delete" 
+                variant="text" 
+                size="small" 
+                color="grey"
+                @click.stop="handleDeleteLink(index)"
+              ></v-btn>
+            </v-card-actions>
           </v-card>
         </v-col>
 
@@ -129,7 +301,7 @@ const getIcon = (title) => {
               variant="text" 
               color="primary" 
               class="mt-2"
-              @click="showAddLinkDialog = true"
+              @click="openAddDialog"
             >
               Add First Link
             </v-btn>
@@ -140,7 +312,7 @@ const getIcon = (title) => {
 
     <v-dialog v-model="showAddLinkDialog" max-width="500">
       <v-card>
-        <v-card-title>Add Quick Link</v-card-title>
+        <v-card-title>{{ isEditing ? 'Edit Bookmark' : 'Add Quick Link' }}</v-card-title>
         <v-card-text>
           <v-text-field
             v-model="newLink.title"
@@ -152,10 +324,10 @@ const getIcon = (title) => {
           
           <v-text-field
             v-model="newLink.url"
-            label="URL (e.g. https://kibana...)"
+            label="URL"
             variant="outlined"
             prepend-inner-icon="mdi-link"
-            hint="Don't worry about http://, we'll add it if missing."
+            hint="Include http:// or https://"
           ></v-text-field>
 
           <v-text-field
@@ -164,17 +336,42 @@ const getIcon = (title) => {
             variant="outlined"
             prepend-inner-icon="mdi-text"
           ></v-text-field>
+
+          <v-row>
+            <v-col cols="6">
+                <v-text-field
+                    v-model="newLink.username"
+                    label="Username (Optional)"
+                    variant="outlined"
+                    prepend-inner-icon="mdi-account"
+                    density="compact"
+                ></v-text-field>
+            </v-col>
+            <v-col cols="6">
+                <v-text-field
+                    v-model="newLink.password"
+                    label="Password (Optional)"
+                    :type="showPassword ? 'text' : 'password'"
+                    variant="outlined"
+                    prepend-inner-icon="mdi-lock"
+                    :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+                    @click:append-inner="showPassword = !showPassword"
+                    density="compact"
+                ></v-text-field>
+            </v-col>
+          </v-row>
+
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showAddLinkDialog = false">Cancel</v-btn>
           <v-btn 
             color="primary" 
-            @click="handleAddLink" 
+            @click="handleSaveLink" 
             :loading="addingLink"
             :disabled="!newLink.title || !newLink.url"
           >
-            Add Link
+            {{ isEditing ? 'Update' : 'Add Link' }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -190,5 +387,11 @@ const getIcon = (title) => {
 .hover-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+}
+.status-indicator {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 2;
 }
 </style>

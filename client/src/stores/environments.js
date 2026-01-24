@@ -137,6 +137,17 @@ export const useEnvironmentStore = defineStore('environments', () => {
     await updateEnvironment(envId, { quickLinks: currentLinks });
   }
 
+  async function updateQuickLink(envId, index, linkData) {
+    const env = environments.value.find(e => e.id == envId);
+    if(!env || !env.quickLinks) return;
+
+    const currentLinks = [...env.quickLinks];
+    if(index >= 0 && index < currentLinks.length) {
+        currentLinks[index] = linkData;
+        await updateEnvironment(envId, { quickLinks: currentLinks });
+    }
+  }
+
   async function removeQuickLink(envId, linkIndex) {
     const env = environments.value.find(e => e.id === envId);
     if (!env || !env.quickLinks) return;
@@ -145,6 +156,24 @@ export const useEnvironmentStore = defineStore('environments', () => {
     currentLinks.splice(linkIndex, 1);
 
     await updateEnvironment(envId, { quickLinks: currentLinks });
+  }
+
+  async function checkLinkStatus(url) {
+    try {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`${API_URL}/status/check`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ url })
+        });
+        
+        if (!res.ok) return { status: 'unknown' };
+        
+        return await res.json();
+    } catch (e) {
+        console.error("Status check failed:", e);
+        return { status: 'error' };
+    }
   }
 
   return { 
@@ -158,6 +187,8 @@ export const useEnvironmentStore = defineStore('environments', () => {
     updateEnvironment,
     selectEnvironment,
     addQuickLink,
-    removeQuickLink 
+    updateQuickLink,
+    removeQuickLink,
+    checkLinkStatus
   };
 });

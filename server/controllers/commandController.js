@@ -1,18 +1,19 @@
 const { db } = require('../config/firebase');
 
 const getCommands = async(req, res) => {
-       try {
-        const {envId} = req.query;
+    try {
+        const { envId } = req.query;
 
         if(!envId) return res.status(400).json({error: "envId is required"});
 
-        const snapshot = db.collection('environments').where("envId", "==", envId).get();
+        const snapshot = await db.collection('commands').where("envId", "==", envId).get();
 
         const commands = [];
-
-        snapshot.forEach(doc => {
-            commands.push({id: doc.id, ...doc.data()});
-        })
+        if (!snapshot.empty) {
+            snapshot.forEach(doc => {
+                commands.push({id: doc.id, ...doc.data()});
+            });
+        }
 
         res.status(200).json(commands);  
     } catch(error){
@@ -29,17 +30,26 @@ const createCommand = async(req, res) => {
             createdAt: new Date().toISOString()
         };
 
-        const docRef = await db.collection('environments').add(newCommand);
+        const docRef = await db.collection('commands').add(newCommand);
         res.status(201).json({ id: docRef.id, ...newCommand });
     } catch(error){
         res.status(500).json({error: error.message});
     } 
 }
 
-const updateCommands = async(req, res) => {
+const updateCommand = async(req, res) => {
     try {
+        const { id } = req.params;
+        const data = req.body;
 
-        res.status(200).json({ message: "" });  
+        const docRef = db.collection('commands').doc(id);
+        const doc = await docRef.get();
+
+        if (!doc.exists) return res.status(404).json({ error: "Command not found" });
+
+        await docRef.update(data);
+
+        res.status(200).json({ id, ...doc.data(), ...data });  
     } catch(error){
         res.status(500).json({error: error.message});
     } 
@@ -55,4 +65,4 @@ const deleteCommand = async(req, res) => {
     } 
 }
 
-module.exports = { getCommands, createCommand, deleteCommand };
+module.exports = { getCommands, createCommand, updateCommand, deleteCommand };

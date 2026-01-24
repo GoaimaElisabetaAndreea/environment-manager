@@ -35,7 +35,7 @@ export const useCommandStore = defineStore('commands', () => {
 
         commands.value = await res.json();
     } catch (e) {
-      console.error("Error fetching commands:", e)
+      console.error(e)
     } finally {
       loading.value = false
     }
@@ -62,8 +62,30 @@ export const useCommandStore = defineStore('commands', () => {
       const newCmd = await res.json();
       commands.value.push(newCmd);
     } catch (e) {
-      console.error("Error adding command:", e)
+      console.error(e)
       throw e
+    }
+  }
+
+  async function updateCommand(id, updates) {
+    try {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`${API_URL}/commands/${id}`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify(updates)
+        });
+
+        if(!res.ok) throw new Error("Failed to update command");
+
+        const updatedCmd = await res.json();
+        const index = commands.value.findIndex(c => c.id === id);
+        if (index !== -1) {
+            commands.value[index] = { ...commands.value[index], ...updatedCmd };
+        }
+    } catch (e) {
+        console.error(e);
+        throw e;
     }
   }
 
@@ -79,10 +101,10 @@ export const useCommandStore = defineStore('commands', () => {
 
         commands.value = commands.value.filter(command => command.id !== id);
     } catch (e) {
-      console.error("Error deleting command:", e)
+      console.error(e)
       throw e
     }
   }
 
-  return { commands, loading, fetchCommands, addCommand, deleteCommand }
+  return { commands, loading, fetchCommands, addCommand, updateCommand, deleteCommand }
 })

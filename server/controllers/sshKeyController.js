@@ -6,7 +6,7 @@ const SECRET_KEY = crypto.createHash('sha256').update(process.env.ENCRYPTION_KEY
 const IV_LENGTH = 16;
 
 function encrypt(text) {
-    const iv = crypto.randomBytes(IV_LENGTH);
+    const iv = crypto.randomBytes(IV_LENGTH); 
     const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(SECRET_KEY), iv);
     let encrypted = cipher.update(text);
     encrypted = Buffer.concat([encrypted, cipher.final()]);
@@ -25,7 +25,7 @@ function decrypt(text) {
 
 const createKey = async (req, res) => {
     try {
-        const { title, value, envId } = req.body;
+        const { title, value, envId, alias } = req.body; 
         
         if (!title || !value || !envId) {
             return res.status(400).json({ error: "Missing required fields" });
@@ -34,6 +34,7 @@ const createKey = async (req, res) => {
         const encryptedValue = encrypt(value);
         const newKey = {
             title,
+            alias: alias || '', 
             value: encryptedValue,
             envId,
             userId: req.user.uid, 
@@ -42,6 +43,30 @@ const createKey = async (req, res) => {
 
         const docRef = await db.collection('ssh_keys').add(newKey);
         res.status(201).json({ id: docRef.id, ...newKey, value: value });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const updateKey = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { title, value, alias } = req.body;
+
+        const docRef = db.collection('ssh_keys').doc(id);
+        const doc = await docRef.get();
+
+        if (!doc.exists) return res.status(404).json({ error: "Key not found" });
+        if (doc.data().userId !== req.user.uid) return res.status(403).json({ error: "Not authorized" });
+
+        const updates = { title, alias };
+        
+        if (value) {
+            updates.value = encrypt(value);
+        }
+
+        await docRef.update(updates);
+        res.status(200).json({ id, ...doc.data(), ...updates, value }); 
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -128,4 +153,4 @@ const testConnection = async (req, res) => {
     socket.connect(targetPort, host);
 };
 
-module.exports = { createKey, getKeysByEnv, deleteKey, testConnection };
+module.exports = { createKey, getKeysByEnv, deleteKey, testConnection, updateKey };

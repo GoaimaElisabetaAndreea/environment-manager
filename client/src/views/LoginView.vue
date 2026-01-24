@@ -1,72 +1,161 @@
 <script setup>
 import { ref } from 'vue';
-import { useAuthStore } from '../stores/auth.js';
+import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
-
-const email = ref('');
-const password = ref('');
-const loading = ref(false);
-const errorMessage = ref('');
 
 const authStore = useAuthStore();
 const router = useRouter();
 
-const handleLogin = async () => {
-    loading.value = true;
-    errorMessage.value = '';
+const email = ref('');
+const password = ref('');
+const rememberMe = ref(true);
+const loading = ref(false);
 
-    try{
-        await authStore.login(email.value, password.value);
-        router.push('/dashboard');
-    } catch(error){
-        errorMessage.value = "Email or password is incorrect";
-    } finally{
+const showResetDialog = ref(false);
+const resetEmail = ref('');
+const resetLoading = ref(false);
+
+const handleLogin = async () => {
+    if (!email.value || !password.value) return;
+
+    loading.value = true;
+    try {
+        await authStore.login(email.value, password.value, rememberMe.value);
+        router.push('/');
+    } catch (e) {
+        alert("Login failed: " + e.message);
+    } finally {
         loading.value = false;
     }
-} 
+};
+
+const openResetDialog = () => {
+    resetEmail.value = email.value; 
+    showResetDialog.value = true;
+};
+
+const handleResetPassword = async () => {
+    if (!resetEmail.value) return;
+    
+    resetLoading.value = true;
+    try {
+        await authStore.resetPassword(resetEmail.value);
+        alert("Password reset email sent! Please check your inbox.");
+        showResetDialog.value = false;
+    } catch (e) {
+        alert("Error: " + e.message);
+    } finally {
+        resetLoading.value = false;
+    }
+};
 </script>
 
 <template>
-    <v-container class="fill-height" fluid>
+    <v-container class="fill-height bg-grey-lighten-3" fluid>
         <v-row align="center" justify="center">
             <v-col cols="12" sm="8" md="4">
-                <v-card class="elevation-12">
-                    <v-toolbar color="primary" dark flat>
-                        <v-toolbar-title>Login</v-toolbar-title>
-                    </v-toolbar>
-                    <v-card-text>
+                <v-card class="elevation-12 rounded-lg">
+                    <div class="bg-primary pa-4 text-center">
+                         <v-icon size="48" color="white">mdi-shield-key</v-icon>
+                         <h2 class="text-white text-h5 font-weight-bold mt-2">Welcome Back</h2>
+                    </div>
+                    
+                    <v-card-text class="pt-6">
                         <v-form @submit.prevent="handleLogin">
                             <v-text-field
                                 v-model="email"
-                                label="Email"
-                                prepend-icon="mdi-email"
+                                label="Email Address"
+                                prepend-inner-icon="mdi-email"
                                 type="email"
-                                required
+                                variant="outlined"
+                                density="comfortable"
+                                color="primary"
                             ></v-text-field>
+
                             <v-text-field
                                 v-model="password"
                                 label="Password"
-                                prepend-icon="mdi-lock"
+                                prepend-inner-icon="mdi-lock"
                                 type="password"
-                                required
+                                variant="outlined"
+                                density="comfortable"
+                                color="primary"
+                                class="mt-2"
                             ></v-text-field>
 
-                            <v-alert v-if="errorMessage" color="red-lighten-1"type="error" class="mb-3">
-                                {{ errorMessage }}
-                            </v-alert>
+                            <div class="d-flex justify-space-between align-center mt-1">
+                                <v-checkbox
+                                    v-model="rememberMe"
+                                    label="Remember me"
+                                    color="primary"
+                                    hide-details
+                                    density="compact"
+                                ></v-checkbox>
+                                
+                                <a 
+                                    href="#" 
+                                    class="text-caption text-primary text-decoration-none font-weight-bold"
+                                    @click.prevent="openResetDialog"
+                                >
+                                    Forgot Password?
+                                </a>
+                            </div>
 
-                            <v-btn
-                                type="submit"
-                                color="primary"
-                                block
+                            <v-btn 
+                                block 
+                                color="primary" 
+                                size="large" 
+                                class="mt-6 font-weight-bold" 
+                                @click="handleLogin" 
                                 :loading="loading"
+                                elevation="2"
                             >
-                                SIGN IN
+                                Login
                             </v-btn>
                         </v-form>
+
+                        <div class="text-center mt-6">
+                            <span class="text-grey-darken-1 text-body-2">Don't have an account? </span>
+                            <router-link 
+                                to="/register" 
+                                class="text-primary text-decoration-none font-weight-bold text-body-2"
+                            >
+                                Register here
+                            </router-link>
+                        </div>
                     </v-card-text>
                 </v-card>
             </v-col>
         </v-row>
+
+        <v-dialog v-model="showResetDialog" max-width="400">
+            <v-card>
+                <v-card-title class="bg-primary text-white">Reset Password</v-card-title>
+                <v-card-text class="pt-4">
+                    <p class="text-body-2 text-grey-darken-1 mb-4">
+                        Enter your email address and we'll send you a link to reset your password.
+                    </p>
+                    <v-text-field
+                        v-model="resetEmail"
+                        label="Email Address"
+                        prepend-inner-icon="mdi-email"
+                        variant="outlined"
+                        autofocus
+                    ></v-text-field>
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn variant="text" @click="showResetDialog = false">Cancel</v-btn>
+                    <v-btn 
+                        color="primary" 
+                        @click="handleResetPassword" 
+                        :loading="resetLoading"
+                        :disabled="!resetEmail"
+                    >
+                        Send Link
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
     </v-container>
 </template>

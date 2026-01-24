@@ -8,6 +8,9 @@ const commandStore = useCommandStore();
 const envStore = useEnvironmentStore();
 
 const showCreateDialog = ref(false);
+const isEditing = ref(false);
+const editingId = ref(null);
+
 const selectedCommand = ref(null);
 const inputValues = ref({});
 const selectedFlags = ref([]);
@@ -15,6 +18,40 @@ const selectedFlags = ref([]);
 const showSuggestions = ref(false);
 const suggestionFilter = ref('');
 const cursorIndex = ref(0);
+
+const commandHistory = ref([]);
+
+const commonFlags = curlFlags.length > 0 ? curlFlags : [
+  { label: 'Include Headers (-i)', value: '-i' },
+  { label: 'Verbose (-v)', value: '-v' },
+  { label: 'Insecure (-k)', value: '-k' },
+  { label: 'Follow Redirects (-L)', value: '-L' },
+  { label: 'Silent (-s)', value: '-s' }
+];
+
+const newCommand = ref({
+  title: '',
+  description: '',
+  template: 'curl -X POST https://api.example.com/users/{{userId}}/reset-password',
+  flags: []
+});
+
+onMounted(() => {
+  commandStore.fetchCommands();
+  const savedHistory = localStorage.getItem('cmd_history');
+  if (savedHistory) {
+    try {
+        commandHistory.value = JSON.parse(savedHistory);
+    } catch(e) {
+        console.error(e);
+    }
+  }
+})
+
+watch(() => envStore.currentEnvId, () => {
+  selectedCommand.value = null;
+  commandStore.fetchCommands();
+})
 
 const availableVariables = computed(() => {
   if (!envStore.currentEnvironment?.variables) return [];
@@ -81,30 +118,6 @@ const insertVariable = (variableName) => {
   }
 };
 
-const commonFlags = curlFlags.length > 0 ? curlFlags : [
-  { label: 'Include Headers (-i)', value: '-i' },
-  { label: 'Verbose (-v)', value: '-v' },
-  { label: 'Insecure (-k)', value: '-k' },
-  { label: 'Follow Redirects (-L)', value: '-L' },
-  { label: 'Silent (-s)', value: '-s' }
-];
-
-const newCommand = ref({
-  title: '',
-  description: '',
-  template: 'curl -X POST https://api.example.com/users/{{userId}}/reset-password',
-  flags: []
-});
-
-onMounted(() => {
-  commandStore.fetchCommands();
-})
-
-watch(() => envStore.currentEnvId, () => {
-  selectedCommand.value = null;
-  commandStore.fetchCommands();
-})
-
 const detectedVariables = computed(() => {
   if (!selectedCommand.value) return [];
 
@@ -141,10 +154,66 @@ const finalCommand = computed(() => {
   return cmd;
 })
 
-const handleCreate = async () => {
+const saveToHistory = () => {
+    if (!finalCommand.value) return;
+    
+    const item = {
+        cmd: finalCommand.value,
+        timestamp: new Date().toISOString(),
+        templateName: selectedCommand.value?.title || 'Unknown'
+    };
+
+    commandHistory.value.unshift(item);
+    
+    if (commandHistory.value.length > 10) {
+        commandHistory.value.pop();
+    }
+
+    localStorage.setItem('cmd_history', JSON.stringify(commandHistory.value));
+}
+
+const copyHistoryItem = (cmd) => {
+    navigator.clipboard.writeText(cmd);
+    alert('Command from history copied!');
+}
+
+const formatTime = (isoString) => {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+const openCreateDialog = () => {
+    isEditing.value = false;
+    editingId.value = null;
+    newCommand.value = { title: '', description: '', template: '', flags: [] };
+    showCreateDialog.value = true;
+}
+
+const openEditDialog = (cmd) => {
+    isEditing.value = true;
+    editingId.value = cmd.id;
+    newCommand.value = { 
+        title: cmd.title, 
+        description: cmd.description, 
+        template: cmd.template, 
+        flags: cmd.flags || []
+    };
+    showCreateDialog.value = true;
+}
+
+const handleSave = async () => {
   if (!newCommand.value.title || !newCommand.value.template) return;
  
-  await commandStore.addCommand({ ...newCommand.value });
+  if (isEditing.value) {
+      await commandStore.updateCommand(editingId.value, { ...newCommand.value });
+      
+      if (selectedCommand.value?.id === editingId.value) {
+          selectedCommand.value = { ...selectedCommand.value, ...newCommand.value };
+      }
+  } else {
+      await commandStore.addCommand({ ...newCommand.value });
+  }
+
   showCreateDialog.value = false;
   newCommand.value = { title: '', description: '', template: '', flags:[] };
 }
@@ -157,7 +226,8 @@ const selectCmd = (cmd) => {
 
 const copyToClipboard = () => {
   navigator.clipboard.writeText(finalCommand.value);
-  alert('Copied!');
+  saveToHistory();
+  alert('Copied & Saved to History!');
 }
 
 const handleDelete = async (id) => {
@@ -166,16 +236,6 @@ const handleDelete = async (id) => {
     if (selectedCommand.value?.id === id) selectedCommand.value = null
   }
 }
-
-const preview = computed( () => {
-  let cmd = newCommand.value.template || '';
-
-  const matches = cmd.match(/\{\{(.*?)\}\}/g)
-
-  if(newCommand.flags.length > 0){
-    
-  }
-})
 </script>
 
 <template>
@@ -184,14 +244,14 @@ const preview = computed( () => {
       <v-col cols="12" md="4">
         <div class="d-flex justify-space-between align-center mb-4">
           <h2 class="text-h6">Command Templates</h2>
-          <v-btn size="small" color="primary" icon="mdi-plus" @click="showCreateDialog = true"></v-btn>
+          <v-btn size="small" color="primary" icon="mdi-plus" @click="openCreateDialog"></v-btn>
         </div>
 
         <v-alert v-if="!envStore.currentEnvId" type="warning" density="compact" class="mb-4">
           Select an environment
         </v-alert>
 
-        <v-list v-else lines="two" class="bg-grey-darken-4 rounded elevation-2">
+        <v-list v-else lines="two" class="bg-grey-darken-4 rounded elevation-2" style="max-height: 70vh; overflow-y: auto;">
           <v-list-item
             v-for="cmd in commandStore.commands"
             :key="cmd.id"
@@ -203,7 +263,21 @@ const preview = computed( () => {
             class="mb-1"
           >
             <template v-slot:append>
-              <v-btn icon="mdi-delete" size="x-small" variant="text" color="red" @click.stop="handleDelete(cmd.id)"></v-btn>
+                <v-btn 
+                    icon="mdi-pencil" 
+                    size="x-small" 
+                    variant="text" 
+                    color="blue" 
+                    class="mr-1"
+                    @click.stop="openEditDialog(cmd)"
+                ></v-btn>
+                <v-btn 
+                    icon="mdi-delete" 
+                    size="x-small" 
+                    variant="text" 
+                    color="red" 
+                    @click.stop="handleDelete(cmd.id)"
+                ></v-btn>
             </template>
           </v-list-item>
           <div v-if="commandStore.commands.length === 0" class="pa-4 text-center text-grey">
@@ -213,7 +287,7 @@ const preview = computed( () => {
       </v-col>
 
       <v-col cols="12" md="8">
-        <v-card v-if="selectedCommand" class="elevation-4">
+        <v-card v-if="selectedCommand" class="elevation-4 mb-4">
           <v-card-title class="bg-primary text-white">
             Builder: {{ selectedCommand.title }}
           </v-card-title>
@@ -236,7 +310,7 @@ const preview = computed( () => {
               </v-col>
             </v-row>
             <v-alert v-else type="info" variant="tonal" class="mb-4">
-         This template does not have any variables (ex: <span v-pre>{{nume}}</span>).
+         This template does not have any manual variables.
             </v-alert>
 
             <v-divider class="my-4"></v-divider>
@@ -274,18 +348,45 @@ const preview = computed( () => {
           </v-card-text>
         </v-card>
 
-        <v-sheet v-else class="d-flex align-center justify-center fill-height bg-transparent border-dashed rounded" min-height="300">
+        <v-sheet v-else class="d-flex align-center justify-center bg-transparent border-dashed rounded mb-4" min-height="200">
           <div class="text-center text-grey">
             <v-icon size="64" class="mb-2">mdi-console-line</v-icon>
             <p>Select a template or create one.</p>
           </div>
         </v-sheet>
+
+        <v-card v-if="commandHistory.length > 0" class="elevation-2" variant="outlined">
+            <v-card-title class="text-subtitle-1 bg-grey-lighten-4 d-flex align-center">
+                <v-icon icon="mdi-history" size="small" class="mr-2"></v-icon>
+                Recently Generated (Local History)
+            </v-card-title>
+            <v-list density="compact">
+                <v-list-item v-for="(item, i) in commandHistory" :key="i">
+                    <v-list-item-title class="font-monospace text-caption">
+                        {{ item.cmd.substring(0, 80) }}{{ item.cmd.length > 80 ? '...' : '' }}
+                    </v-list-item-title>
+                    <v-list-item-subtitle>
+                        {{ item.templateName }} &bull; {{ formatTime(item.timestamp) }}
+                    </v-list-item-subtitle>
+                    <template v-slot:append>
+                        <v-btn 
+                            icon="mdi-content-copy" 
+                            size="x-small" 
+                            variant="text"
+                            title="Copy to clipboard"
+                            @click="copyHistoryItem(item.cmd)"
+                        ></v-btn>
+                    </template>
+                </v-list-item>
+            </v-list>
+        </v-card>
+
       </v-col>
     </v-row>
 
     <v-dialog v-model="showCreateDialog" max-width="600">
       <v-card>
-        <v-card-title>New Command Template</v-card-title>
+        <v-card-title>{{ isEditing ? 'Edit Template' : 'New Command Template' }}</v-card-title>
         <v-card-text>
           <v-text-field v-model="newCommand.title" label="Title" variant="outlined"></v-text-field>
           <v-text-field v-model="newCommand.description" label="Description" variant="outlined"></v-text-field>
@@ -386,7 +487,7 @@ const preview = computed( () => {
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showCreateDialog = false">Cancel</v-btn>
-          <v-btn color="primary" @click="handleCreate">Save</v-btn>
+          <v-btn color="primary" @click="handleSave">{{ isEditing ? 'Update' : 'Save' }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

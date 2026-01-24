@@ -122,8 +122,9 @@ const handleLogout = async () => {
 
 const menuItems = [
   { title: 'Dashboard', icon: 'mdi-view-dashboard', to: '/dashboard' },
+  { title: 'Wiki', icon: 'mdi-book-open-page-variant', to: '/wiki' },
   { title: 'Command Builder', icon: 'mdi-console', to: '/commands' },
-  { title: 'SSH Manager', icon: 'mdi-key-variant', to: '/ssh-keys' }, // <-- NOU
+  { title: 'SSH Manager', icon: 'mdi-key-variant', to: '/ssh-keys' }, 
   { title: 'Share Secret', icon: 'mdi-lock-plus', to: '/secrets/create' },
 ]
 </script>

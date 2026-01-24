@@ -1,28 +1,55 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
-import { auth } from '../firebase.js';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { 
+    signInWithEmailAndPassword, 
+    createUserWithEmailAndPassword, 
+    signOut, 
+    onAuthStateChanged,
+    setPersistence,
+    browserLocalPersistence,
+    browserSessionPersistence,
+    sendPasswordResetEmail 
+} from 'firebase/auth';
+import { auth } from '../firebase';
 
 export const useAuthStore = defineStore('auth', () => {
     const user = ref(null);
+    const loading = ref(true);
+    const error = ref(null);
 
-    async function register(email, password) {
-        try{
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            user.value = userCredential.user;
-        } catch(error){
-            console.error("Registration failed: ", error);
-            throw error;
+    function initAuth() {
+        loading.value = true;
+        onAuthStateChanged(auth, (u) => {
+            user.value = u;
+            loading.value = false;
+        });
+    }
+
+    async function login(email, password, rememberMe = true) {
+        loading.value = true;
+        error.value = null;
+        try {
+            const persistenceMode = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+            await setPersistence(auth, persistenceMode);
+            await signInWithEmailAndPassword(auth, email, password);
+        } catch (e) {
+            error.value = e.message;
+            throw e;
+        } finally {
+            loading.value = false;
         }
     }
-    
-    async function login(email, password){
-        try{
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            user.value = userCredential.user;
-        } catch(error){
-            console.error("Login failed: ", error );
-            throw error;
+
+    async function register(email, password) {
+        loading.value = true;
+        error.value = null;
+        try {
+            await createUserWithEmailAndPassword(auth, email, password);
+        } catch (e) {
+            error.value = e.message;
+            throw e;
+        } finally {
+            loading.value = false;
         }
     }
 
@@ -31,5 +58,18 @@ export const useAuthStore = defineStore('auth', () => {
         user.value = null;
     }
 
-    return { user, register, login, logout };
+    async function resetPassword(email) {
+        loading.value = true;
+        error.value = null;
+        try {
+            await sendPasswordResetEmail(auth, email);
+        } catch (e) {
+            error.value = e.message;
+            throw e;
+        } finally {
+            loading.value = false;
+        }
+    }
+
+    return { user, loading, error, initAuth, login, register, logout, resetPassword };
 });

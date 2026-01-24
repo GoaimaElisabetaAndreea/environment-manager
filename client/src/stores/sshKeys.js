@@ -19,7 +19,7 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
     async function fetchKeys(envId) {
         if (!envId) return;
         if(!auth.currentUser) return; 
-        
+
         loading.value = true;
         try {
             const headers = await getAuthHeaders();
@@ -53,6 +53,31 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
             throw error;
         }
     }
+
+    async function updateKey(id, keyData) {
+        try {
+            const headers = await getAuthHeaders();
+            const res = await fetch(`${API_URL}/ssh-keys/${id}`, {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify(keyData)
+            });
+
+            if (!res.ok) throw new Error('Failed to update key');
+
+            const updatedKey = await res.json();
+    
+            const index = keys.value.findIndex(k => k.id === id);
+            if (index !== -1) {
+                keys.value[index] = { ...keys.value[index], ...updatedKey };
+            }
+        } catch (error) {
+            console.error(error);
+            throw error;
+        }
+    }
+
+    return { keys, loading, fetchKeys, addKey, deleteKey, updateKey, testConnection };
 
     async function deleteKey(id) {
         try {

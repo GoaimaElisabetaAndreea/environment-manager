@@ -1,51 +1,79 @@
-import { createRouter, createWebHistory } from 'vue-router';
-import DashboardView from '../views/DashboardView.vue';
-import LoginView from '../views/LoginView.vue';
-import RegisterView from '../views/RegisterView.vue';
-import SecretCreateView from '../views/SecretCreateView.vue' 
+import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+import LoginView from '../views/LoginView.vue'
+import RegisterView from '../views/RegisterView.vue'
+import DashboardView from '../views/DashboardView.vue'
+import SshKeyManagerView from '../views/SshKeyManagerView.vue'
+import SecretCreateView from '../views/SecretCreateView.vue'
 import SecretReadView from '../views/SecretReadView.vue'
 import CommandBuilderView from '../views/CommandBuilderView.vue'
-import SshKeyManagerView from '../views/SshKeyManagerView.vue';
+import WikiView from '../views/WikiView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    {
-      path: '/register',
-      name: 'register',
-      component: RegisterView
-    },
-    {
-      path: '/login',
-      name: 'login',
-      component: LoginView
-    },
-    {
-      path: '/dashboard',
-      name: 'dashboard',
-      component: DashboardView
+    { path: '/login', name: 'login', component: LoginView },
+    { path: '/register', name: 'register', component: RegisterView },
+    { 
+      path: '/', 
+      name: 'dashboard', 
+      component: DashboardView,
+      meta: { requiresAuth: true }
     },
     { 
-      path: '/secrets/create', 
-      name: 'create-secret', 
-      component: SecretCreateView 
+      path: '/ssh-keys', 
+      name: 'ssh-keys', 
+      component: SshKeyManagerView,
+      meta: { requiresAuth: true }
     },
     { 
-      path: '/secrets/view/:id', 
-      name: 'view-secret', 
+      path: '/commands', 
+      name: 'commands', 
+      component: CommandBuilderView,
+      meta: { requiresAuth: true }
+    },
+    { 
+      path: '/secrets', 
+      name: 'secrets', 
+      component: SecretCreateView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/wiki',
+      name: 'wiki',
+      component: WikiView,
+      meta: { requiresAuth: true }
+    },
+    { 
+      path: '/s/:id', 
+      name: 'secret-read', 
       component: SecretReadView 
-    },
-    {
-      path: '/commands',
-      name: 'commands',
-      component: CommandBuilderView
-    },
-    {
-      path: '/ssh-keys',
-      name: 'ssh-keys',
-      component: SshKeyManagerView
-    },
+    }
   ]
-});
+})
 
-export default router;
+router.beforeEach(async (to, from, next) => {
+  const authStore = useAuthStore()
+  
+  if (!authStore.user && authStore.loading) {
+     await new Promise(resolve => {
+       const unwatch = authStore.$subscribe((mutation, state) => {
+         if (!state.loading) {
+           unwatch()
+           resolve()
+         }
+       })
+     })
+  }
+
+  if (to.meta.requiresAuth && !authStore.user) {
+    next('/login')
+  } else if ((to.name === 'login' || to.name === 'register') && authStore.user) {
+    next('/')
+  } else {
+    next()
+  }
+})
+
+export default router

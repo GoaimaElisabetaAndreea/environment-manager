@@ -8,7 +8,7 @@ const getEnvironments = async (req, res) => {
         const environments = [];
 
         snapshot.forEach(doc => {
-            environments.push({id: doc.id});
+            environments.push({id: doc.id, ...doc.data()});
         })
         
         res.status(200).json(environments);
@@ -30,7 +30,7 @@ const createEnvironments = async (req, res) => {
             createdAt: new Date().toISOString()
         };
 
-        const docRef = await db.collection('environmemts').add(newEnv);
+        const docRef = await db.collection('environments').add(newEnv);
         res.status(201).json({id: docRef.id, ...newEnv});
     } catch(error){
         res.status(500).json({error: error.message});
