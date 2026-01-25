@@ -256,42 +256,99 @@ const handleDelete = async (id) => {
     if (selectedCommand.value?.id === id) selectedCommand.value = null
   }
 }
+
+const toggleSortOrder = () => {
+    commandStore.sortOrder = commandStore.sortOrder === 'desc' ? 'asc' : 'desc';
+    commandStore.fetchCommands();
+}
 </script>
 
 <template>
   <v-container fluid>
     <v-row>
-      <v-col cols="12" md="4">
-        <div class="d-flex justify-space-between align-center mb-4">
-          <h2 class="text-h6">Command Templates</h2>
-          <v-btn size="small" color="primary" icon="mdi-plus" @click="openCreateDialog"></v-btn>
-        </div>
+<v-col cols="12" md="4">
+  <div class="d-flex justify-space-between align-center mb-2">
+    <h2 class="text-h6">Templates</h2>
+    <v-btn size="small" color="primary" icon="mdi-plus" @click="openCreateDialog"></v-btn>
+  </div>
 
-        <v-alert v-if="!envStore.currentEnvId" type="warning" density="compact" class="mb-4">
-          Select an environment
-        </v-alert>
+  <div class="d-flex gap-2 mb-2">
+      <v-select
+        v-model="commandStore.sortBy"
+        :items="[{title: 'Name', value: 'name'}, {title: 'Date', value: 'createdAt'}]"
+        label="Sort after"
+        density="compact"
+        variant="outlined"
+        hide-details
+        @update:model-value="commandStore.fetchCommands()"
+        class="mr-2"
+      ></v-select>
+      
+<v-btn 
+  icon 
+  variant="tonal" 
+  density="compact" 
+  class="mt-1"
+  @click="toggleSortOrder"  >
+  <v-icon>{{ commandStore.sortOrder === 'desc' ? 'mdi-arrow-down' : 'mdi-arrow-up' }}</v-icon>
+</v-btn>
+  </div>
 
-        <v-list v-else lines="two" class="bg-grey-darken-4 rounded elevation-2" style="max-height: 70vh; overflow-y: auto;">
-          <v-list-item
-            v-for="cmd in commandStore.commands"
-            :key="cmd.id"
-            :title="cmd.name || cmd.title"
-            :subtitle="cmd.description"
-            :active="selectedCommand?.id === cmd.id"
-            @click="selectCmd(cmd)"
-            rounded
-            class="mb-1"
-          >
-            <template v-slot:append>
-                <v-btn icon="mdi-pencil" size="x-small" variant="text" color="blue" class="mr-1" @click.stop="openEditDialog(cmd)"></v-btn>
-                <v-btn icon="mdi-delete" size="x-small" variant="text" color="red" @click.stop="handleDelete(cmd.id)"></v-btn>
-            </template>
-          </v-list-item>
-          <div v-if="commandStore.commands.length === 0" class="pa-4 text-center text-grey">
-            No templates found.
-          </div>
-        </v-list>
-      </v-col>
+  <v-alert v-if="!envStore.currentEnvId" type="warning" density="compact" class="mb-4">
+    Select an environment
+  </v-alert>
+
+  <div v-else class="bg-grey-darken-4 rounded elevation-2 d-flex flex-column" style="height: 70vh;">
+    <v-list lines="two" class="bg-transparent overflow-y-auto flex-grow-1">
+<v-list-item
+  v-for="cmd in commandStore.commands"
+  :key="cmd.id"
+  :title="cmd.name || cmd.title"
+  :subtitle="cmd.description"
+  :active="selectedCommand?.id === cmd.id"
+  @click="selectCmd(cmd)"
+  rounded
+  class="mb-1"
+>
+  <template v-slot:append>
+      <v-btn 
+        icon="mdi-pencil" 
+        size="x-small" 
+        variant="text" 
+        color="blue" 
+        class="mr-1" 
+        @click.stop="openEditDialog(cmd)"
+      ></v-btn>
+      <v-btn 
+        icon="mdi-delete" 
+        size="x-small" 
+        variant="text" 
+        color="red" 
+        @click.stop="handleDelete(cmd.id)"
+      ></v-btn>
+  </template>
+</v-list-item>
+      
+      <div v-if="commandStore.commands.length === 0 && !commandStore.loading" class="pa-4 text-center text-grey">
+       No templates.
+      </div>
+      
+      <div v-if="commandStore.loading" class="pa-4 text-center">
+          <v-progress-circular indeterminate color="primary" size="24"></v-progress-circular>
+      </div>
+    </v-list>
+
+    <div class="pa-2 border-t border-grey-darken-3">
+        <v-pagination
+            v-model="commandStore.currentPage"
+            :length="Math.ceil(commandStore.totalItems / commandStore.itemsPerPage)"
+            density="compact"
+            total-visible="3"
+            @update:model-value="(page) => commandStore.fetchCommands(page)"
+        ></v-pagination>
+    </div>
+  </div>
+</v-col>
 
       <v-col cols="12" md="8">
         <v-card v-if="selectedCommand" class="elevation-4 mb-4">
@@ -359,6 +416,7 @@ const handleDelete = async (id) => {
                             title="Copy to clipboard"
                             @click="copyHistoryItem(item.cmd)"
                         ></v-btn>
+                        
                     </template>
                 </v-list-item>
             </v-list>

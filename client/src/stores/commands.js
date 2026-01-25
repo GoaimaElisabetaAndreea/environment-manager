@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { useEnvironmentStore } from './environments'
 import { auth } from '../firebase'
+import { orderBy } from 'firebase/firestore'
 
 export const useCommandStore = defineStore('commands', () => {
   const commands = ref([])
@@ -9,6 +10,12 @@ export const useCommandStore = defineStore('commands', () => {
   const envStore = useEnvironmentStore()
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+
+  const totalItems = ref(0)
+  const currentPage = ref(1)
+  const itemsPerPage = ref(9)
+  const sortBy = ref('createdAt')
+  const sortOrder = ref('desc')
 
   const getAuthHeaders = async () => {
     if (!auth.currentUser) throw new Error("User not logged in");
@@ -19,14 +26,27 @@ export const useCommandStore = defineStore('commands', () => {
     };
   };
 
-  async function fetchCommands() {
+async function fetchCommands(page = currentPage.value, limit = itemsPerPage.value) {
     if (!envStore.currentEnvId) return;
     loading.value = true;
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`${API_URL}/commands?envId=${envStore.currentEnvId}`, { headers });
+      
+      const params = new URLSearchParams({
+          envId: envStore.currentEnvId,
+          page: page.toString(),
+          limit: limit.toString(),
+          sortBy: sortBy.value,
+          sortOrder: sortOrder.value
+      });
+
+      const res = await fetch(`${API_URL}/commands?${params}`, { headers });
       if (res.ok) {
-        commands.value = await res.json();
+        const responseData = await res.json();
+      
+        commands.value = responseData.data;
+        totalItems.value = responseData.total;
+        currentPage.value = responseData.page;
       }
     } catch (e) {
       console.error(e)
@@ -111,5 +131,17 @@ export const useCommandStore = defineStore('commands', () => {
     }
   }
 
-  return { commands, loading, fetchCommands, addCommand, updateCommand, deleteCommand }
+  return { 
+      commands, 
+      loading, 
+      totalItems,
+      currentPage,
+      itemsPerPage,
+      sortBy,       
+      sortOrder,    
+      fetchCommands, 
+      addCommand, 
+      updateCommand, 
+      deleteCommand 
+  }
 })

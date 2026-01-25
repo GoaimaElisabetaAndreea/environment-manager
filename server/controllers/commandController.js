@@ -2,19 +2,41 @@ const { db } = require('../config/firebase');
 
 const getCommands = async (req, res) => {
     try {
-        const { envId } = req.query;
+        const { envId, page = 1, limit = 5, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
         const userId = req.user.uid;
+
         if (!envId) return res.status(400).json({ error: "envId required" });
 
-        const snapshot = await db.collection('commands')
+        const limitInt = parseInt(limit);
+        const offset = (parseInt(page) - 1) * limitInt;
+
+        let query = db.collection('commands')
+            .where("envId", "==", envId)
+            .where("userId", "==", userId);
+
+        query = query.orderBy(sortBy, sortOrder === 'desc' ? 'desc' : 'asc');
+
+        const countSnapshot = await db.collection('commands')
             .where("envId", "==", envId)
             .where("userId", "==", userId)
+            .count()
             .get();
+
+        const snapshot = await query.limit(limitInt).offset(offset).get();
 
         const commands = [];
         snapshot.forEach(doc => commands.push({ id: doc.id, ...doc.data() }));
-        res.status(200).json(commands);
+        
+        res.status(200).json({
+            data: commands,
+            total: countSnapshot.data().count,
+            page: parseInt(page),
+            limit: limitInt,
+            totalPages: Math.ceil(countSnapshot.data().count / limitInt)
+        });
+
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: error.message });
     }
 }

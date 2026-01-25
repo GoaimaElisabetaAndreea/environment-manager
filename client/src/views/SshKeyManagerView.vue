@@ -86,34 +86,25 @@ const copyString = (str) => {
 
 const runTest = async (key) => {
     testingId.value = key.id;
-
-    let privateKeyContent = null;
-    const shouldAuth = confirm("Dorești să testezi și autentificarea completă?\n(Va trebui să introduci conținutul cheii private)");
-    
-    if (shouldAuth) {
-        privateKeyContent = prompt("Lipește aici conținutul cheii private (începe cu -----BEGIN...):");
-        if (!privateKeyContent) {
-             alert("Test anulat: Cheia privată este necesară pentru autentificare.");
-             testingId.value = null;
-             return;
+    try {
+        const result = await sshStore.testConnection(key.value, null);
+        
+        key.lastStatus = result.status; 
+        key.lastPort = result.port;
+        key.lastMessage = result.message; 
+        
+        if (result.status === 'open') {
+            alert("Conexiune Reușită!\nServerul este ONLINE și acceptă conexiuni SSH.");
+        } else if (result.status === 'timeout') {
+            alert("Mw Timp expirat.\nVerifică adresa IP sau regulile de Firewall.");
+        } else {
+            alert(`Eroare conectare: ${result.message}`);
         }
+    } catch (e) {
+        alert("Eroare neașteptată: " + e.message);
+    } finally {
+        testingId.value = null;
     }
-
-    const result = await sshStore.testConnection(key.value, privateKeyContent);
-    
-    key.lastStatus = result.status; 
-    key.lastPort = result.port;
-    key.lastMessage = result.message; 
-    
-    if (result.status === 'open' && result.message.includes('Auth Successful')) {
-        alert("Succes: Autentificarea SSH a reușit!");
-    } else if (result.status === 'open') {
-        alert("Info: Serverul este online, dar autentificarea nu a fost testată sau a eșuat parțial.");
-    } else {
-        alert("Eroare: " + result.message);
-    }
-
-    testingId.value = null;
 }
 
 const getConnectionColor = (status) => {
