@@ -1,4 +1,27 @@
-const { db } = require('../config/firebase');
+const { db, admin } = require('../config/firebase');
+const crypto = require('crypto');
+
+const ALGORITHM = 'aes-256-cbc';
+const SECRET_KEY = crypto.createHash('sha256').update(process.env.ENCRYPTION_KEY || 'default_secret').digest();
+const IV_LENGTH = 16;
+
+function encrypt(text) {
+    const iv = crypto.randomBytes(IV_LENGTH);
+    const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(SECRET_KEY), iv);
+    let encrypted = cipher.update(text);
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    return iv.toString('hex') + ':' + encrypted.toString('hex');
+}
+
+function decrypt(text) {
+    const textParts = text.split(':');
+    const iv = Buffer.from(textParts.shift(), 'hex');
+    const encryptedText = Buffer.from(textParts.join(':'), 'hex');
+    const decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(SECRET_KEY), iv);
+    let decrypted = decipher.update(encryptedText);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return decrypted.toString();
+}
 
 const getEnvironments = async (req, res) => {
     try {
@@ -7,7 +30,14 @@ const getEnvironments = async (req, res) => {
         const environments = [];
 
         snapshot.forEach(doc => {
-            environments.push({ id: doc.id, ...doc.data() });
+            const data = doc.data();
+            if (data.sshKeys) {
+                data.sshKeys = data.sshKeys.map(key => ({
+                    ...key,
+                    value: key.value.includes(':') ? decrypt(key.value) : key.value
+                }));
+            }
+            environments.push({ id: doc.id, ...data });
         })
 
         res.status(200).json(environments);
@@ -28,6 +58,8 @@ const createEnvironments = async (req, res) => {
             name: name.trim(),
             userId: req.user.uid,
             quickLinks: [],
+            commands: [],
+            sshKeys: [],
             createdAt: new Date().toISOString()
         };
 
@@ -97,4 +129,117 @@ const deleteEnvironment = async (req, res) => {
     }
 }
 
-module.exports = { getEnvironments, createEnvironments, updateEnvironment, deleteEnvironment }
+const addCommandToEnv = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { title, description, template, flags } = req.body;
+
+        const newCommand = {
+            id: crypto.randomUUID(),
+            title,
+            description: description || '',
+            template,
+            flags: flags || [],
+            createdAt: new Date().toISOString()
+        };
+
+        const envRef = db.collection('environments').doc(id);
+        const doc = await envRef.get();
+        if (!doc.exists || doc.data().userId !== req.user.uid) return res.status(403).json({ error: "Unauthorized" });
+
+        await envRef.update({
+            commands: admin.firestore.FieldValue.arrayUnion(newCommand)
+        });
+
+        res.status(200).json(newCommand);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const removeCommandFromEnv = async (req, res) => {
+    try {
+        const { id, cmdId } = req.params;
+
+        const envRef = db.collection('environments').doc(id);
+        const doc = await envRef.get();
+        
+        if (!doc.exists || doc.data().userId !== req.user.uid) return res.status(403).json({ error: "Unauthorized" });
+
+        const envData = doc.data();
+        const commandToDelete = envData.commands ? envData.commands.find(c => c.id === cmdId) : null;
+
+        if (commandToDelete) {
+            await envRef.update({
+                commands: admin.firestore.FieldValue.arrayRemove(commandToDelete)
+            });
+        }
+
+        res.status(200).json({ message: "Command deleted" });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const addSshKeyToEnv = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { title, value, alias } = req.body;
+
+        const newKey = {
+            id: crypto.randomUUID(),
+            title,
+            value: encrypt(value),
+            alias: alias || '',
+            createdAt: new Date().toISOString()
+        };
+
+        const envRef = db.collection('environments').doc(id);
+        const doc = await envRef.get();
+        if (!doc.exists || doc.data().userId !== req.user.uid) return res.status(403).json({ error: "Unauthorized" });
+
+        await envRef.update({
+            sshKeys: admin.firestore.FieldValue.arrayUnion(newKey)
+        });
+
+        newKey.value = value; 
+        res.status(200).json(newKey);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const removeSshKeyFromEnv = async (req, res) => {
+    try {
+        const { id, keyId } = req.params;
+
+        const envRef = db.collection('environments').doc(id);
+        const doc = await envRef.get();
+        
+        if (!doc.exists || doc.data().userId !== req.user.uid) return res.status(403).json({ error: "Unauthorized" });
+
+        const envData = doc.data();
+        const keyToDelete = envData.sshKeys ? envData.sshKeys.find(k => k.id === keyId) : null;
+
+        if (keyToDelete) {
+            await envRef.update({
+                sshKeys: admin.firestore.FieldValue.arrayRemove(keyToDelete)
+            });
+        }
+
+        res.status(200).json({ message: "SSH Key deleted" });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+module.exports = { 
+    getEnvironments, 
+    createEnvironments, 
+    updateEnvironment, 
+    deleteEnvironment,
+    addCommandToEnv,
+    removeCommandFromEnv,
+    addSshKeyToEnv,
+    removeSshKeyFromEnv
+};

@@ -186,6 +186,52 @@ const copyConfig = () => {
     alert("Config copied!");
     showConfigDialog.value = false;
 }
+
+const sortOption = ref('newest'); 
+
+const sortOptions = [
+    { title: 'Newest', value: 'newest' },
+    { title: 'Oldest', value: 'oldest' },
+    { title: 'Alphabetical (A-Z)', value: 'az' },
+    { title: 'Alphabetical (Z-A)', value: 'za' },
+    { title: 'Status (Online first)', value: 'status' } 
+];
+
+const sortedKeys = computed(() => {
+    const items = [...sshStore.keys];
+
+    return items.sort((a, b) => {
+        let comparison = 0;
+
+        switch (sortOption.value) {
+            case 'newest':
+                comparison = new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+                break;
+            case 'oldest':
+                comparison = new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+                break;
+            case 'az':
+                comparison = a.title.localeCompare(b.title);
+                break;
+            case 'za':
+                comparison = b.title.localeCompare(a.title);
+                break;
+            case 'status':
+                const statusOrder = { 'open': 1, 'timeout': 2, 'error': 3, 'closed': 4, undefined: 5 };
+                const statA = statusOrder[a.lastStatus] || 5;
+                const statB = statusOrder[b.lastStatus] || 5;
+                comparison = statA - statB;
+                break;
+        }
+
+        if (comparison === 0) {
+            return a.title.localeCompare(b.title);
+        }
+
+        return comparison;
+    });
+});
+
 </script>
 
 <template>
@@ -200,14 +246,30 @@ const copyConfig = () => {
                     Please select an environment from the sidebar.
                 </span>
             </div>
-            <v-btn 
-                prepend-icon="mdi-plus" 
-                color="primary" 
-                @click="openCreateDialog"
-                :disabled="!envStore.currentEnvId"
-            >
-                Add SSH Key
-            </v-btn>
+<div class="d-flex align-center">
+                <v-select
+                    v-model="sortOption"
+                    :items="sortOptions"
+                    item-title="title"
+                    item-value="value"
+                    label="Sortează după"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    class="mr-4"
+                    style="width: 200px;"
+                    prepend-inner-icon="mdi-sort"
+                ></v-select>
+
+                <v-btn 
+                    prepend-icon="mdi-plus" 
+                    color="primary" 
+                    @click="openCreateDialog"
+                    :disabled="!envStore.currentEnvId"
+                >
+                    Add SSH Key
+                </v-btn>
+            </div>
         </div>
 
         <v-row>
