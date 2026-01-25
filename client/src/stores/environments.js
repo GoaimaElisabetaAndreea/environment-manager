@@ -42,19 +42,23 @@ export const useEnvironmentStore = defineStore('environments', () => {
       }
 
     } catch(error){
-      console.error("Error trying to fetch envs: ", error);
+      console.error(error);
     } finally {
       loading.value = false
     }
   }
 
   async function addEnvironment(name) {
+    if (!name || typeof name !== 'string' || !name.trim()) {
+        throw new Error("Environment name is required");
+    }
+
     try{
       const headers = await getAuthHeaders();
       const res = await fetch(`${API_URL}/environments`, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ name })
+          body: JSON.stringify({ name: name.trim() })
       });
 
       if(!res.ok) throw new Error("Failed to create env");
@@ -65,12 +69,14 @@ export const useEnvironmentStore = defineStore('environments', () => {
       
       return newEnv.id
     } catch(e){
-      console.error("Error trying to create new env: ", e);
+      console.error(e);
       throw e;
     }
   }
 
   async function deleteEnvironment(id) {
+    if (!id || typeof id !== 'string') throw new Error("Invalid Environment ID");
+
     if(!confirm("Are you sure you want to delete this?")) return;
 
     try{
@@ -92,12 +98,15 @@ export const useEnvironmentStore = defineStore('environments', () => {
         }
       }
     } catch (e) {
-      console.error("Error deleting env:", e);
+      console.error(e);
       throw e;
     }
   }
 
   async function updateEnvironment(id, data) {
+      if (!id || typeof id !== 'string') throw new Error("Invalid Environment ID");
+      if (!data || typeof data !== 'object') throw new Error("Invalid update data");
+
       try {
         const headers = await getAuthHeaders();
         const res = await fetch(`${API_URL}/environments/${id}`, {
@@ -113,7 +122,7 @@ export const useEnvironmentStore = defineStore('environments', () => {
           Object.assign(env, data);
         }
       } catch (e) {
-        console.error("Error updating env:", e);
+        console.error(e);
         throw e;
       }
   }
@@ -128,50 +137,74 @@ export const useEnvironmentStore = defineStore('environments', () => {
   }
 
   async function addQuickLink(envId, linkData){
+    if (!envId || typeof envId !== 'string') throw new Error("Invalid Environment ID");
+    if (!linkData || typeof linkData !== 'object') throw new Error("Invalid link data");
+    if (!linkData.title || !linkData.url) throw new Error("Link title and URL are required");
+
     const env = environments.value.find(e => e.id == envId);
-    if(!env) return;
+    if(!env) throw new Error("Environment not found");
 
     const currentLinks = env.quickLinks ? [...env.quickLinks] : [];
-    currentLinks.push(linkData);
+    currentLinks.push({
+        title: linkData.title.trim(),
+        url: linkData.url.trim()
+    });
     
     await updateEnvironment(envId, { quickLinks: currentLinks });
   }
 
   async function updateQuickLink(envId, index, linkData) {
+    if (!envId || typeof envId !== 'string') throw new Error("Invalid Environment ID");
+    if (typeof index !== 'number' || index < 0) throw new Error("Invalid link index");
+    if (!linkData || typeof linkData !== 'object') throw new Error("Invalid link data");
+
     const env = environments.value.find(e => e.id == envId);
-    if(!env || !env.quickLinks) return;
+    if(!env || !env.quickLinks) throw new Error("Environment or links not found");
 
     const currentLinks = [...env.quickLinks];
-    if(index >= 0 && index < currentLinks.length) {
-        currentLinks[index] = linkData;
-        await updateEnvironment(envId, { quickLinks: currentLinks });
-    }
+    if(index >= currentLinks.length) throw new Error("Link index out of bounds");
+
+    currentLinks[index] = {
+        ...currentLinks[index],
+        ...linkData,
+        title: linkData.title ? linkData.title.trim() : currentLinks[index].title,
+        url: linkData.url ? linkData.url.trim() : currentLinks[index].url
+    };
+    
+    await updateEnvironment(envId, { quickLinks: currentLinks });
   }
 
   async function removeQuickLink(envId, linkIndex) {
+    if (!envId || typeof envId !== 'string') throw new Error("Invalid Environment ID");
+    if (typeof linkIndex !== 'number' || linkIndex < 0) throw new Error("Invalid link index");
+
     const env = environments.value.find(e => e.id === envId);
     if (!env || !env.quickLinks) return;
 
     const currentLinks = [...env.quickLinks];
+    if (linkIndex >= currentLinks.length) return; 
+
     currentLinks.splice(linkIndex, 1);
 
     await updateEnvironment(envId, { quickLinks: currentLinks });
   }
 
   async function checkLinkStatus(url) {
+    if (!url || typeof url !== 'string' || !url.trim()) return { status: 'error' };
+
     try {
         const headers = await getAuthHeaders();
         const res = await fetch(`${API_URL}/status/check`, {
             method: 'POST',
             headers,
-            body: JSON.stringify({ url })
+            body: JSON.stringify({ url: url.trim() })
         });
         
         if (!res.ok) return { status: 'unknown' };
         
         return await res.json();
     } catch (e) {
-        console.error("Status check failed:", e);
+        console.error(e);
         return { status: 'error' };
     }
   }

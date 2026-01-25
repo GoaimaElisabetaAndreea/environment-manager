@@ -20,17 +20,28 @@ export const useSecretStore = defineStore('secrets', () => {
     };
 
     async function createSecret({ text, file, password, ttlInMinutes }) {
+        if (!ttlInMinutes || typeof ttlInMinutes !== 'number' || ttlInMinutes <= 0) {
+            throw new Error("Invalid Time-to-Live (TTL)");
+        }
+
+        const hasText = text && typeof text === 'string' && text.trim().length > 0;
+        const hasFile = file !== null && file !== undefined;
+
+        if (!hasText && !hasFile) {
+            throw new Error("Either text content or a file is required");
+        }
+
         try {
             const encryptionKey = generateEncryptionKey();
 
-            const passwordHash = password 
+            const passwordHash = password && typeof password === 'string' && password.trim()
                 ? CryptoJS.SHA256(password).toString() 
                 : null;
 
             let encryptedFileContent = null;
             let encryptedFileName = null;
 
-            if (file) {
+            if (hasFile) {
                 const fileToUpload = Array.isArray(file) ? file[0] : file;
 
                 const fileDataUrl = await new Promise((resolve, reject) => {
@@ -44,8 +55,8 @@ export const useSecretStore = defineStore('secrets', () => {
                 encryptedFileName = CryptoJS.AES.encrypt(fileToUpload.name, encryptionKey).toString();
             }
             
-            const encryptedText = text 
-                ? CryptoJS.AES.encrypt(text, encryptionKey).toString() 
+            const encryptedText = hasText 
+                ? CryptoJS.AES.encrypt(text.trim(), encryptionKey).toString() 
                 : null;
 
             const headers = await getAuthHeaders();
@@ -70,12 +81,14 @@ export const useSecretStore = defineStore('secrets', () => {
             return { id: data.id, key: encryptionKey };
 
         } catch(error){
-            console.error("Error creating secret: ", error);
+            console.error(error);
             throw error;
         }
     }
 
     async function getSecretMetaData(id) {
+        if (!id || typeof id !== 'string') throw new Error("Invalid Secret ID");
+
         const res = await fetch(`${API_URL}/secrets/${id}/meta`);
         
         if (!res.ok) {
@@ -87,9 +100,13 @@ export const useSecretStore = defineStore('secrets', () => {
     }
 
     async function revealSecret(id, encryptionKey, userPassword = null) {
+        if (!id || typeof id !== 'string') throw new Error("Invalid Secret ID");
+        if (!encryptionKey || typeof encryptionKey !== 'string') throw new Error("Missing encryption key");
+
         try {
             let passwordHash = null;
             if (userPassword) {
+                if (typeof userPassword !== 'string') throw new Error("Invalid password format");
                 passwordHash = CryptoJS.SHA256(userPassword).toString();
             }
 
@@ -112,7 +129,7 @@ export const useSecretStore = defineStore('secrets', () => {
             if (data.text) {
                 const bytes = CryptoJS.AES.decrypt(data.text, encryptionKey);
                 decryptedText = bytes.toString(CryptoJS.enc.Utf8);
-                if(!decryptedText) throw new Error("Decryption failed (Wrong URL key).");
+                if(!decryptedText) throw new Error("Decryption failed. The key provided may be incorrect.");
             }
 
             if (data.file) {
@@ -121,6 +138,8 @@ export const useSecretStore = defineStore('secrets', () => {
 
                 const nameBytes = CryptoJS.AES.decrypt(data.file.name, encryptionKey);
                 const fileName = nameBytes.toString(CryptoJS.enc.Utf8);
+
+                if (!fileDataUrl || !fileName) throw new Error("File decryption failed.");
 
                 decryptedFile = {
                     dataUrl: fileDataUrl,
@@ -131,7 +150,7 @@ export const useSecretStore = defineStore('secrets', () => {
             return { text: decryptedText, file: decryptedFile };
 
         } catch (e) {
-            console.error("Error revealing secret: ", e);
+            console.error(e);
             throw e;
         }
     }

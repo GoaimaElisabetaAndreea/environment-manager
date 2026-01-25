@@ -5,34 +5,46 @@ const { URL } = require('url');
 const checkUrlStatus = async (req, res) => {
     const { url } = req.body;
 
-    if (!url) {
+    if (!url || typeof url !== 'string' || !url.trim()) {
         return res.status(400).json({ error: 'URL is required' });
     }
+
+    let parsedUrl;
+    try {
+        parsedUrl = new URL(url.trim());
+    } catch (error) {
+        return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return res.status(400).json({ error: 'Only HTTP and HTTPS protocols are supported' });
+    }
+
     let responseSent = false;
 
     const sendResponse = (data) => {
         if (!responseSent) {
             responseSent = true;
-            res.json(data);
+            if (!res.headersSent) {
+                res.json(data);
+            }
         }
     };
 
     try {
-        const parsedUrl = new URL(url);
         const lib = parsedUrl.protocol === 'https:' ? https : http;
-
         const startTime = Date.now();
 
-        const request = lib.request(url, { method: 'HEAD', timeout: 5000 }, (response) => {
+        const request = lib.request(parsedUrl.toString(), { method: 'HEAD', timeout: 5000 }, (response) => {
             const duration = Date.now() - startTime;
-            
+
             response.resume();
-            
-            const isUp = response.statusCode < 500; 
-            sendResponse({ 
-                status: isUp ? 'up' : 'down', 
+
+            const isUp = response.statusCode < 500;
+            sendResponse({
+                status: isUp ? 'up' : 'down',
                 statusCode: response.statusCode,
-                latency: duration 
+                latency: duration
             });
         });
 
@@ -41,14 +53,16 @@ const checkUrlStatus = async (req, res) => {
         });
 
         request.on('timeout', () => {
-            request.destroy(); 
+            request.destroy();
             sendResponse({ status: 'timeout', latency: 5000 });
         });
 
         request.end();
 
     } catch (error) {
-        sendResponse({ status: 'error', error: 'Invalid URL format' });
+        if (!responseSent) {
+            sendResponse({ status: 'error', error: error.message });
+        }
     }
 };
 

@@ -15,27 +15,50 @@ const createSecret = async (req, res) => {
     try {
         const { encryptedContent, encryptedFile, encryptedFileName, passwordHash, ttlInMinutes } = req.body;
 
+        if (!ttlInMinutes || typeof ttlInMinutes !== 'number' || ttlInMinutes <= 0) {
+            return res.status(400).json({ error: "Valid ttlInMinutes (positive number) is required" });
+        }
+
+        const hasContent = encryptedContent && typeof encryptedContent === 'string' && encryptedContent.trim().length > 0;
+        const hasFile = encryptedFile !== undefined && encryptedFile !== null;
+
+        if (!hasContent && !hasFile) {
+            return res.status(400).json({ error: "Either encryptedContent or encryptedFile must be provided" });
+        }
+
+        if (hasFile) {
+            if (!encryptedFileName || typeof encryptedFileName !== 'string' || !encryptedFileName.trim()) {
+                return res.status(400).json({ error: "encryptedFileName is required when uploading a file" });
+            }
+        }
+
+        if (passwordHash !== undefined && (typeof passwordHash !== 'string' || !passwordHash.trim())) {
+            return res.status(400).json({ error: "passwordHash must be a valid string if provided" });
+        }
+
         const expiresAt = new Date(Date.now() + ttlInMinutes * 60000).toISOString();
         let storagePath = null;
 
-        if (encryptedFile) {
+        if (hasFile) {
             const fileName = `secrets/${Date.now()}_${Math.random().toString(36).substring(7)}`;
             const bucket = admin.storage().bucket();
             const file = bucket.file(fileName);
-            
+
             await file.save(encryptedFile);
             storagePath = fileName;
         }
 
-        const docRef = await db.collection('secrets').add({
-            content: encryptedContent || null,
-            storagePath: storagePath, 
-            fileName: encryptedFileName || null,
+        const newSecret = {
+            content: hasContent ? encryptedContent : null,
+            storagePath: storagePath,
+            fileName: hasFile ? encryptedFileName : null,
             passwordHash: passwordHash || null,
             expiresAt: expiresAt,
             createdAt: new Date().toISOString(),
             viewed: false
-        });
+        };
+
+        const docRef = await db.collection('secrets').add(newSecret);
 
         res.status(201).json({ id: docRef.id });
     } catch (error) {
@@ -47,6 +70,11 @@ const createSecret = async (req, res) => {
 const getSecretMetaData = async (req, res) => {
     try {
         const { id } = req.params;
+
+        if (!id || typeof id !== 'string') {
+            return res.status(400).json({ error: "Invalid ID" });
+        }
+
         const docRef = db.collection('secrets').doc(id);
         const doc = await docRef.get();
 
@@ -73,7 +101,15 @@ const getSecretMetaData = async (req, res) => {
 const revealSecret = async (req, res) => {
     try {
         const { id } = req.params;
-        const { passwordHash } = req.body; 
+        const { passwordHash } = req.body;
+
+        if (!id || typeof id !== 'string') {
+            return res.status(400).json({ error: "Invalid ID" });
+        }
+
+        if (passwordHash !== undefined && typeof passwordHash !== 'string') {
+            return res.status(400).json({ error: "Invalid password format" });
+        }
 
         const docRef = db.collection('secrets').doc(id);
         const doc = await docRef.get();
@@ -94,7 +130,7 @@ const revealSecret = async (req, res) => {
         if (data.storagePath) {
             const bucket = admin.storage().bucket();
             const [content] = await bucket.file(data.storagePath).download();
-            fileContent = content.toString('utf-8'); 
+            fileContent = content.toString('utf-8');
         }
 
         await deleteSecretData(id, data);
