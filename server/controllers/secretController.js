@@ -32,7 +32,7 @@ const createSecret = async (req, res) => {
             }
         }
 
-        if (passwordHash !== undefined && (typeof passwordHash !== 'string' || !passwordHash.trim())) {
+        if (passwordHash !== undefined && passwordHash !== null && (typeof passwordHash !== 'string' || !passwordHash.trim())) {
             return res.status(400).json({ error: "passwordHash must be a valid string if provided" });
         }
 
@@ -107,7 +107,7 @@ const revealSecret = async (req, res) => {
             return res.status(400).json({ error: "Invalid ID" });
         }
 
-        if (passwordHash !== undefined && typeof passwordHash !== 'string') {
+        if (passwordHash !== undefined && passwordHash !== null && typeof passwordHash !== 'string') {
             return res.status(400).json({ error: "Invalid password format" });
         }
 

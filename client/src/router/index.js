@@ -58,8 +58,13 @@ router.beforeEach(async (to, from, next) => {
   
   if (!authStore.user && authStore.loading) {
      await new Promise(resolve => {
+       const timeout = setTimeout(() => {
+          resolve(); 
+       }, 2000);
+
        const unwatch = authStore.$subscribe((mutation, state) => {
          if (!state.loading) {
+           clearTimeout(timeout);
            unwatch()
            resolve()
          }

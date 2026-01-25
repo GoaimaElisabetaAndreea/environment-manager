@@ -86,9 +86,33 @@ const copyString = (str) => {
 
 const runTest = async (key) => {
     testingId.value = key.id;
-    const result = await sshStore.testConnection(key.value);
+
+    let privateKeyContent = null;
+    const shouldAuth = confirm("Dorești să testezi și autentificarea completă?\n(Va trebui să introduci conținutul cheii private)");
+    
+    if (shouldAuth) {
+        privateKeyContent = prompt("Lipește aici conținutul cheii private (începe cu -----BEGIN...):");
+        if (!privateKeyContent) {
+             alert("Test anulat: Cheia privată este necesară pentru autentificare.");
+             testingId.value = null;
+             return;
+        }
+    }
+
+    const result = await sshStore.testConnection(key.value, privateKeyContent);
+    
     key.lastStatus = result.status; 
-    key.lastPort = result.port; 
+    key.lastPort = result.port;
+    key.lastMessage = result.message; 
+    
+    if (result.status === 'open' && result.message.includes('Auth Successful')) {
+        alert("Succes: Autentificarea SSH a reușit!");
+    } else if (result.status === 'open') {
+        alert("Info: Serverul este online, dar autentificarea nu a fost testată sau a eșuat parțial.");
+    } else {
+        alert("Eroare: " + result.message);
+    }
+
     testingId.value = null;
 }
 

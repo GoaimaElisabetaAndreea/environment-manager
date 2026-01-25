@@ -31,7 +31,7 @@ const handleCreate = async () => {
             ttlInMinutes: ttl.value
         });
         
-        generatedLink.value = `${window.location.origin}/secrets/view/${id}#${key}`
+       generatedLink.value = `${window.location.origin}/s/${id}#${key}`
         
         secretContent.value = '';
         secretFile.value = null;

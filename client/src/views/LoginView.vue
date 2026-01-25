@@ -10,20 +10,26 @@ const email = ref('');
 const password = ref('');
 const rememberMe = ref(true);
 const loading = ref(false);
+const errorMessage = ref('');
 
 const showResetDialog = ref(false);
 const resetEmail = ref('');
 const resetLoading = ref(false);
 
 const handleLogin = async () => {
-    if (!email.value || !password.value) return;
+    errorMessage.value = '';
+
+    if (!email.value || !password.value) {
+        errorMessage.value = "Please fill in all required fields.";
+        return;
+    }
 
     loading.value = true;
     try {
         await authStore.login(email.value, password.value, rememberMe.value);
         router.push('/');
     } catch (e) {
-        alert("Login failed: " + e.message);
+        errorMessage.value = "Failed login: " + e.message;
     } finally {
         loading.value = false;
     }
@@ -70,6 +76,7 @@ const handleResetPassword = async () => {
                                 variant="outlined"
                                 density="comfortable"
                                 color="primary"
+                                :error-messages="errorMessage && !email ? 'Field required' : ''"
                             ></v-text-field>
 
                             <v-text-field
@@ -81,6 +88,7 @@ const handleResetPassword = async () => {
                                 density="comfortable"
                                 color="primary"
                                 class="mt-2"
+                                :error-messages="errorMessage && !password ? 'Field required' : ''"
                             ></v-text-field>
 
                             <div class="d-flex justify-space-between align-center mt-1">
@@ -99,6 +107,11 @@ const handleResetPassword = async () => {
                                 >
                                     Forgot Password?
                                 </a>
+                            </div>
+
+                            <div v-if="errorMessage" class="text-red text-center mt-2 text-body-2 font-weight-medium">
+                                <v-icon icon="mdi-alert-circle" size="small" class="mr-1"></v-icon>
+                                {{ errorMessage }}
                             </div>
 
                             <v-btn 

@@ -41,7 +41,7 @@ const createEnvironments = async (req, res) => {
 const updateEnvironment = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, quickLinks } = req.body;
+        const { name, quickLinks, wikiContent, variables } = req.body;
 
         const updates = {};
 
@@ -59,8 +59,22 @@ const updateEnvironment = async (req, res) => {
             updates.quickLinks = quickLinks;
         }
 
+        if (wikiContent !== undefined) {
+            if (typeof wikiContent !== 'string') {
+                return res.status(400).json({ error: "Wiki content must be a string" });
+            }
+            updates.wikiContent = wikiContent;
+        }
+
         if (Object.keys(updates).length === 0) {
             return res.status(400).json({ error: "No valid fields provided for update" });
+        }
+
+        if (variables !== undefined) {
+            if (typeof variables !== 'object') {
+                return res.status(400).json({ error: "Variables must be an object" });
+            }
+            updates.variables = variables;
         }
 
         const docRef = db.collection('environments').doc(id);

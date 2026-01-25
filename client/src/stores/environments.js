@@ -146,6 +146,7 @@ export const useEnvironmentStore = defineStore('environments', () => {
 
     const currentLinks = env.quickLinks ? [...env.quickLinks] : [];
     currentLinks.push({
+        ...linkData,
         title: linkData.title.trim(),
         url: linkData.url.trim()
     });

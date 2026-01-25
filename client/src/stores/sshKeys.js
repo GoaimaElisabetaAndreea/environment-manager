@@ -130,41 +130,49 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
             throw error;
         }
     }
-
-    async function testConnection(connectionString) {
+    
+    async function testConnection(connectionString, privateKey = null) {
         if (!connectionString || typeof connectionString !== 'string' || !connectionString.trim()) {
             return { status: 'error', message: 'Empty connection string' };
         }
 
         let host = '';
+        let username = '';
         let port = 22;
 
-        const hostMatch = connectionString.match(/@([\w.-]+)/);
-        if (hostMatch) host = hostMatch[1];
-        else {
+        const userHostMatch = connectionString.match(/([a-zA-Z0-9_.-]+)@([\w.-]+)/);
+        if (userHostMatch) {
+            username = userHostMatch[1];
+            host = userHostMatch[2];
+        } else {
             const parts = connectionString.split(' ');
-            host = parts.find(p => p.includes('.') && !p.startsWith('-')) || '';
+            host = parts.find(p => p.includes('.') && !p.startsWith('-') && !p.includes('@')) || '';
         }
 
         const portMatch = connectionString.match(/-p\s+(\d+)/);
         if (portMatch) port = parseInt(portMatch[1]);
 
         if (!host) {
-            console.error("Could not parse host");
-            return { status: 'error', message: "Could not parse host from string. Make sure it contains 'user@host'" };
+            return { status: 'error', message: "Could not parse host." };
         }
 
         try {
             const headers = await getAuthHeaders();
+       
             const res = await fetch(`${API_URL}/ssh-keys/test`, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ host, port })
+                body: JSON.stringify({ 
+                    host, 
+                    port, 
+                    username, 
+                    privateKey 
+                })
             });
             return await res.json();
         } catch (e) {
             console.error(e);
-            return { status: 'error' };
+            return { status: 'error', message: e.message };
         }
     }
 

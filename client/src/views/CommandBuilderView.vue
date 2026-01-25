@@ -24,33 +24,47 @@ const commandHistory = ref([]);
 const commonFlags = curlFlags.length > 0 ? curlFlags : [
   { label: 'Include Headers (-i)', value: '-i' },
   { label: 'Verbose (-v)', value: '-v' },
-  { label: 'Insecure (-k)', value: '-k' },
-  { label: 'Follow Redirects (-L)', value: '-L' },
   { label: 'Silent (-s)', value: '-s' }
 ];
 
 const newCommand = ref({
-  title: '',
+  name: '',
   description: '',
-  template: 'curl -X POST https://api.example.com/users/{{userId}}/reset-password',
+  command: '',
   flags: []
 });
 
 onMounted(() => {
-  commandStore.fetchCommands();
+  if(envStore.currentEnvId) {
+      commandStore.fetchCommands();
+  }
+  
   const savedHistory = localStorage.getItem('cmd_history');
   if (savedHistory) {
     try {
-        commandHistory.value = JSON.parse(savedHistory);
+        const parsed = JSON.parse(savedHistory);
+        if (Array.isArray(parsed)) {
+        
+            commandHistory.value = parsed.map(item => ({
+                cmd: item.cmd || item.command || '', 
+                timestamp: item.timestamp || new Date().toISOString(),
+                templateName: item.templateName || item.title || item.name || 'Unknown'
+            })).filter(item => item.cmd); 
+        }
     } catch(e) {
-        console.error(e);
+        console.error("Eroare la încărcarea istoricului:", e);
+
+        commandHistory.value = [];
+        localStorage.removeItem('cmd_history');
     }
   }
 })
 
-watch(() => envStore.currentEnvId, () => {
-  selectedCommand.value = null;
-  commandStore.fetchCommands();
+watch(() => envStore.currentEnvId, (newVal) => {
+  if(newVal) {
+      selectedCommand.value = null;
+      commandStore.fetchCommands();
+  }
 })
 
 const availableVariables = computed(() => {
@@ -66,20 +80,16 @@ const filteredSuggestions = computed(() => {
 });
 
 const handleInput = (event) => {
-  const text = newCommand.value.template || '';
-  
+  const text = newCommand.value.command || '';
   let cursor = 0;
   if (event.target && typeof event.target.selectionStart === 'number') {
     cursor = event.target.selectionStart;
   }
-  
   cursorIndex.value = cursor;
 
   const lastOpenBrace = text.lastIndexOf('{{', cursor - 1);
-  
   if (lastOpenBrace !== -1) {
     const closingBrace = text.indexOf('}}', lastOpenBrace);
-    
     if (closingBrace === -1 || closingBrace >= cursor) {
       showSuggestions.value = true;
       suggestionFilter.value = text.substring(lastOpenBrace + 2, cursor);
@@ -92,17 +102,14 @@ const handleInput = (event) => {
 };
 
 const insertVariable = (variableName) => {
-  const text = newCommand.value.template;
+  const text = newCommand.value.command || '';
   const cursor = cursorIndex.value;
-  
   const lastOpenBrace = text.lastIndexOf('{{', cursor - 1);
   
   if (lastOpenBrace !== -1) {
     const before = text.substring(0, lastOpenBrace);
     const after = text.substring(cursor);
-    
-    const newText = `${before}{{${variableName}}}${after}`;
-    newCommand.value.template = newText;
+    newCommand.value.command = `${before}{{${variableName}}}${after}`;
     
     showSuggestions.value = false;
     suggestionFilter.value = '';
@@ -111,8 +118,6 @@ const insertVariable = (variableName) => {
       const textarea = document.getElementById('template-input');
       if(textarea) {
         textarea.focus();
-        const newCursorPos = lastOpenBrace + 2 + variableName.length + 2;
-        textarea.setSelectionRange(newCursorPos, newCursorPos);
       }
     });
   }
@@ -120,8 +125,8 @@ const insertVariable = (variableName) => {
 
 const detectedVariables = computed(() => {
   if (!selectedCommand.value) return [];
-
-  const matches = selectedCommand.value.template.match(/\{\{(.*?)\}\}/g);
+  const text = selectedCommand.value.command || selectedCommand.value.template || '';
+  const matches = text.match(/\{\{(.*?)\}\}/g);
   if (!matches) return [];
   const allVars = [...new Set(matches.map(v => v.replace(/{{|}}/g, '').trim()))];
 
@@ -133,24 +138,21 @@ const detectedVariables = computed(() => {
 
 const finalCommand = computed(() => {
   if (!selectedCommand.value) return '';
-  let cmd = selectedCommand.value.template;
+  let cmd = selectedCommand.value.command || selectedCommand.value.template || '';
   
-  const matches = selectedCommand.value.template.match(/\{\{(.*?)\}\}/g) || []
+  const matches = cmd.match(/\{\{(.*?)\}\}/g) || []
   const allVars = [...new Set(matches.map(v => v.replace(/{{|}}/g, '').trim()))]
 
   allVars.forEach(variable => {
     const envVal = envStore.currentEnvironment?.variables?.[variable];
     const userVal = inputValues.value[variable];
-
     const finalVal = userVal || envVal || `{{${variable}}}`;
-
     cmd = cmd.replaceAll(`{{${variable}}}`, finalVal);
   })
 
   if(selectedFlags.value.length > 0){
     cmd += ' ' + selectedFlags.value.join(' ');
   }
-
   return cmd;
 })
 
@@ -160,15 +162,13 @@ const saveToHistory = () => {
     const item = {
         cmd: finalCommand.value,
         timestamp: new Date().toISOString(),
-        templateName: selectedCommand.value?.title || 'Unknown'
+        templateName: selectedCommand.value?.name || selectedCommand.value?.title || 'Unknown'
     };
 
     commandHistory.value.unshift(item);
     
-    if (commandHistory.value.length > 10) {
-        commandHistory.value.pop();
-    }
-
+    if (commandHistory.value.length > 10) commandHistory.value.pop();
+    
     localStorage.setItem('cmd_history', JSON.stringify(commandHistory.value));
 }
 
@@ -178,14 +178,18 @@ const copyHistoryItem = (cmd) => {
 }
 
 const formatTime = (isoString) => {
-    const date = new Date(isoString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    try {
+        const date = new Date(isoString);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+        return 'Invalid time';
+    }
 }
 
 const openCreateDialog = () => {
     isEditing.value = false;
     editingId.value = null;
-    newCommand.value = { title: '', description: '', template: '', flags: [] };
+    newCommand.value = { name: '', description: '', command: '', flags: [] };
     showCreateDialog.value = true;
 }
 
@@ -193,40 +197,56 @@ const openEditDialog = (cmd) => {
     isEditing.value = true;
     editingId.value = cmd.id;
     newCommand.value = { 
-        title: cmd.title, 
-        description: cmd.description, 
-        template: cmd.template, 
-        flags: cmd.flags || []
+        name: cmd.name || cmd.title || '', 
+        description: cmd.description || '', 
+        command: cmd.command || cmd.template || '', 
+        flags: Array.isArray(cmd.flags) ? cmd.flags : []
     };
     showCreateDialog.value = true;
 }
 
 const handleSave = async () => {
-  if (!newCommand.value.title || !newCommand.value.template) return;
- 
-  if (isEditing.value) {
-      await commandStore.updateCommand(editingId.value, { ...newCommand.value });
-      
-      if (selectedCommand.value?.id === editingId.value) {
-          selectedCommand.value = { ...selectedCommand.value, ...newCommand.value };
-      }
-  } else {
-      await commandStore.addCommand({ ...newCommand.value });
+  if (!envStore.currentEnvId) {
+      alert("No environment selected. Cannot save.");
+      return;
   }
 
-  showCreateDialog.value = false;
-  newCommand.value = { title: '', description: '', template: '', flags:[] };
+  if (!newCommand.value.name || !newCommand.value.command) {
+      alert("Name and Command content are required.");
+      return;
+  }
+ 
+  const payload = {
+      name: String(newCommand.value.name),
+      command: String(newCommand.value.command),
+      description: String(newCommand.value.description || ''),
+      flags: Array.isArray(newCommand.value.flags) ? newCommand.value.flags : []
+  };
+
+  try {
+      if (isEditing.value) {
+          await commandStore.updateCommand(editingId.value, payload);
+          if (selectedCommand.value?.id === editingId.value) {
+              selectedCommand.value = { ...selectedCommand.value, ...payload };
+          }
+      } else {
+          await commandStore.addCommand(payload);
+      }
+      showCreateDialog.value = false;
+  } catch(e) {
+      alert("Error saving command: " + e.message);
+  }
 }
 
 const selectCmd = (cmd) => {
   selectedCommand.value = cmd;
   inputValues.value = {}; 
-  selectedFlags.value = cmd.flags || [];
+  selectedFlags.value = Array.isArray(cmd.flags) ? cmd.flags : [];
 }
 
 const copyToClipboard = () => {
   navigator.clipboard.writeText(finalCommand.value);
-  saveToHistory();
+  saveToHistory(); 
   alert('Copied & Saved to History!');
 }
 
@@ -255,7 +275,7 @@ const handleDelete = async (id) => {
           <v-list-item
             v-for="cmd in commandStore.commands"
             :key="cmd.id"
-            :title="cmd.title"
+            :title="cmd.name || cmd.title"
             :subtitle="cmd.description"
             :active="selectedCommand?.id === cmd.id"
             @click="selectCmd(cmd)"
@@ -263,25 +283,12 @@ const handleDelete = async (id) => {
             class="mb-1"
           >
             <template v-slot:append>
-                <v-btn 
-                    icon="mdi-pencil" 
-                    size="x-small" 
-                    variant="text" 
-                    color="blue" 
-                    class="mr-1"
-                    @click.stop="openEditDialog(cmd)"
-                ></v-btn>
-                <v-btn 
-                    icon="mdi-delete" 
-                    size="x-small" 
-                    variant="text" 
-                    color="red" 
-                    @click.stop="handleDelete(cmd.id)"
-                ></v-btn>
+                <v-btn icon="mdi-pencil" size="x-small" variant="text" color="blue" class="mr-1" @click.stop="openEditDialog(cmd)"></v-btn>
+                <v-btn icon="mdi-delete" size="x-small" variant="text" color="red" @click.stop="handleDelete(cmd.id)"></v-btn>
             </template>
           </v-list-item>
           <div v-if="commandStore.commands.length === 0" class="pa-4 text-center text-grey">
-            No templates in {{ envStore.currentEnvironment?.name }}
+            No templates found.
           </div>
         </v-list>
       </v-col>
@@ -289,17 +296,13 @@ const handleDelete = async (id) => {
       <v-col cols="12" md="8">
         <v-card v-if="selectedCommand" class="elevation-4 mb-4">
           <v-card-title class="bg-primary text-white">
-            Builder: {{ selectedCommand.title }}
+            {{ selectedCommand.name || selectedCommand.title }}
           </v-card-title>
           
           <v-card-text class="pt-4">
             <v-row v-if="detectedVariables.length > 0">
-              <v-col cols="12"><strong>Fill in the variables</strong></v-col>
-              <v-col 
-                v-for="variable in detectedVariables" 
-                :key="variable" 
-                cols="12" md="6"
-              >
+              <v-col cols="12"><strong>Variables</strong></v-col>
+              <v-col v-for="variable in detectedVariables" :key="variable" cols="12" md="6">
                 <v-text-field
                   v-model="inputValues[variable]"
                   :label="variable"
@@ -309,51 +312,31 @@ const handleDelete = async (id) => {
                 ></v-text-field>
               </v-col>
             </v-row>
-            <v-alert v-else type="info" variant="tonal" class="mb-4">
-         This template does not have any manual variables.
-            </v-alert>
 
             <v-divider class="my-4"></v-divider>
-            <div class="mb-4">
-                <v-autocomplete
-                    v-model="selectedFlags"
-                    :items="commonFlags"
-                    item-title="label"
-                    item-value="value"
-                    label="Flags"
-                    multiple
-                    variant="outlined"
-                    density="compact"
-                    hide-details
-                    clearable
-                    chips
-                    closable-chips
-                ></v-autocomplete>
-            </div>
+            <v-autocomplete
+                v-model="selectedFlags"
+                :items="commonFlags"
+                item-title="label"
+                item-value="value"
+                label="Flags"
+                multiple
+                variant="outlined"
+                density="compact"
+                hide-details
+                chips
+                closable-chips
+            ></v-autocomplete>
             <v-divider class="my-4"></v-divider>
 
             <div class="bg-black pa-4 rounded position-relative">
               <code class="text-green-accent-3" style="word-break: break-all;">
                 {{ finalCommand }}
               </code>
-              <v-btn 
-                position="absolute" 
-                location="top right" 
-                icon="mdi-content-copy" 
-                size="small" 
-                class="mt-2 mr-2"
-                @click="copyToClipboard"
-              ></v-btn>
+              <v-btn position="absolute" location="top right" icon="mdi-content-copy" size="small" class="mt-2 mr-2" @click="copyToClipboard"></v-btn>
             </div>
           </v-card-text>
         </v-card>
-
-        <v-sheet v-else class="d-flex align-center justify-center bg-transparent border-dashed rounded mb-4" min-height="200">
-          <div class="text-center text-grey">
-            <v-icon size="64" class="mb-2">mdi-console-line</v-icon>
-            <p>Select a template or create one.</p>
-          </div>
-        </v-sheet>
 
         <v-card v-if="commandHistory.length > 0" class="elevation-2" variant="outlined">
             <v-card-title class="text-subtitle-1 bg-grey-lighten-4 d-flex align-center">
@@ -363,7 +346,7 @@ const handleDelete = async (id) => {
             <v-list density="compact">
                 <v-list-item v-for="(item, i) in commandHistory" :key="i">
                     <v-list-item-title class="font-monospace text-caption">
-                        {{ item.cmd.substring(0, 80) }}{{ item.cmd.length > 80 ? '...' : '' }}
+                        {{ (item.cmd || '').substring(0, 80) }}{{ (item.cmd || '').length > 80 ? '...' : '' }}
                     </v-list-item-title>
                     <v-list-item-subtitle>
                         {{ item.templateName }} &bull; {{ formatTime(item.timestamp) }}
@@ -388,101 +371,45 @@ const handleDelete = async (id) => {
       <v-card>
         <v-card-title>{{ isEditing ? 'Edit Template' : 'New Command Template' }}</v-card-title>
         <v-card-text>
-          <v-text-field v-model="newCommand.title" label="Title" variant="outlined"></v-text-field>
-          <v-text-field v-model="newCommand.description" label="Description" variant="outlined"></v-text-field>
+          <v-text-field v-model="newCommand.name" label="Name" variant="outlined" density="compact" class="mb-2"></v-text-field>
+          <v-text-field v-model="newCommand.description" label="Description" variant="outlined" density="compact"></v-text-field>
           
           <v-autocomplete
-          v-model="newCommand.flags"
-          :items="commonFlags"
-          item-title="label"
-          item-value="value"
-          label="Flags"
-          multiple
-          chips
-          closable-chips
-          variant="outlined"
-          density="compact"
-          class="mt-2"
+            v-model="newCommand.flags"
+            :items="commonFlags"
+            item-title="label"
+            item-value="value"
+            label="Default Flags"
+            multiple
+            chips
+            closable-chips
+            variant="outlined"
+            density="compact"
+            class="mt-2"
           ></v-autocomplete>
 
           <div class="position-relative mt-2">
             <v-textarea 
               id="template-input"
-              v-model="newCommand.template" 
-              label="Template" 
+              v-model="newCommand.command" 
+              label="Command Template" 
               variant="outlined"
-              hint="Type {{ to trigger variable autocomplete."
-              persistent-hint
               rows="4"
               class="font-monospace"
               @input="handleInput"
               @click="handleInput"
               @keyup="handleInput"
             ></v-textarea>
-
-            <v-menu
-              v-model="showSuggestions"
-              activator="#template-input"
-              :close-on-content-click="false"
-              max-height="200"
-              offset="5"
-            >
+             <v-menu v-model="showSuggestions" activator="#template-input" :close-on-content-click="false" max-height="200" offset="5">
               <v-card class="elevation-4">
                 <v-list density="compact">
-                  <v-list-subheader class="text-uppercase text-caption font-weight-bold">
-                    Sugestii ({{filteredSuggestions.length}})
-                  </v-list-subheader>
-                  
-                  <template v-if="filteredSuggestions.length > 0">
-                    <v-list-item
-                      v-for="item in filteredSuggestions"
-                      :key="item"
-                      :value="item"
-                      @click="insertVariable(item)"
-                      prepend-icon="mdi-variable"
-                      color="primary"
-                    >
+                   <v-list-item v-for="item in filteredSuggestions" :key="item" :value="item" @click="insertVariable(item)">
                       <v-list-item-title>{{ item }}</v-list-item-title>
-                      <v-list-item-subtitle class="text-caption">
-                        {{ envStore.currentEnvironment?.variables[item]?.substring(0, 30) }}...
-                      </v-list-item-subtitle>
-                    </v-list-item>
-                  </template>
-                  
-                  <v-list-item v-else>
-                    <v-list-item-title class="text-grey text-caption font-italic">
-                      No matching variables found
-                    </v-list-item-title>
-                  </v-list-item>
+                   </v-list-item>
                 </v-list>
               </v-card>
             </v-menu>
           </div>
-
-          <div class="mt-4 pa-3 bg-grey-lighten-4 rounded border" v-if="envStore.currentEnvId">
-            <div class="text-caption text-grey-darken-2 mb-2 font-weight-bold d-flex align-center">
-              <v-icon size="small" icon="mdi-information-outline" class="mr-1"></v-icon>
-              Available Variables in {{ envStore.currentEnvironment?.name }}:
-            </div>
-            
-            <div v-if="availableVariables.length > 0" class="d-flex flex-wrap" style="gap: 8px;">
-                <v-chip 
-                    v-for="key in availableVariables" 
-                    :key="key"
-                    size="x-small" 
-                    variant="flat"
-                    color="primary"
-                    @click="insertVariable(key)"
-                    class="font-weight-medium"
-                >
-                    {{ key }}
-                </v-chip>
-            </div>
-            <div v-else class="text-caption text-grey font-italic">
-                No variables defined in this environment settings.
-            </div>
-          </div>
-
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
@@ -495,7 +422,5 @@ const handleDelete = async (id) => {
 </template>
 
 <style scoped>
-.font-monospace :deep(textarea) {
-  font-family: monospace;
-}
+.font-monospace :deep(textarea) { font-family: monospace; }
 </style>

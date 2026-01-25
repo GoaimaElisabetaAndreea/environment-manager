@@ -55,7 +55,7 @@ const handleSave = async () => {
     <v-container fluid class="fill-height align-start pa-0">
         <v-row no-gutters class="fill-height">
             <v-col cols="12" class="fill-height">
-                <div v-if="!envStore.currentEnvId" class="d-flex flex-column align-center justify-center h-100 mt-10">
+                <div v-if="!envStore.currentEnvironment" class="d-flex flex-column align-center justify-center h-100 mt-10">
                     <v-icon size="64" color="grey-lighten-1">mdi-book-open-blank-variant</v-icon>
                     <h2 class="text-grey mt-4">No Environment Selected</h2>
                     <p class="text-grey-darken-1">Select an environment to view its wiki.</p>
