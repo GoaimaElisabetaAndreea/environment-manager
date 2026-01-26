@@ -3,6 +3,9 @@ import { ref, onMounted, watch, computed } from 'vue';
 import { useSshKeyStore } from '@/stores/sshKeys';
 import { useEnvironmentStore } from '@/stores/environments';
 import { useAuthStore } from '@/stores/auth'; 
+import { useSnackbarStore } from '@/stores/snackbar';
+
+const snackbar = useSnackbarStore();
 
 const sshStore = useSshKeyStore();
 const envStore = useEnvironmentStore();
@@ -68,7 +71,7 @@ const handleSave = async () => {
         showDialog.value = false;
         newKey.value = { title: '', value: '', alias: '' };
     } catch (e) {
-        alert('Error saving key');
+        snackbar.showError('Error saving key');
     } finally {
         creating.value = false;
     }
@@ -94,14 +97,14 @@ const runTest = async (key) => {
         key.lastMessage = result.message; 
         
         if (result.status === 'open') {
-            alert("Conexiune Reușită!\nServerul este ONLINE și acceptă conexiuni SSH.");
+            snackbar.showSuccess("Conexiune Reușită!\nServerul este ONLINE și acceptă conexiuni SSH.");
         } else if (result.status === 'timeout') {
-            alert("Mw Timp expirat.\nVerifică adresa IP sau regulile de Firewall.");
+            snackbar.showError("Mw Timp expirat.\nVerifică adresa IP sau regulile de Firewall.");
         } else {
-            alert(`Eroare conectare: ${result.message}`);
+            snackbar.showError(`Eroare conectare: ${result.message}`);
         }
     } catch (e) {
-        alert("Eroare neașteptată: " + e.message);
+        snackbar.showError("Eroare neașteptată: " + e.message);
     } finally {
         testingId.value = null;
     }
@@ -130,7 +133,7 @@ const installCommand = computed(() => {
 
 const copyInstallCommand = () => {
     navigator.clipboard.writeText(installCommand.value);
-    alert("Command copied!");
+    snackbar.showInfo("Command copied!");
 }
 
 
@@ -198,7 +201,7 @@ const openConfigGenerator = (key) => {
 
 const copyConfig = () => {
     navigator.clipboard.writeText(generatedConfig.value);
-    alert("Config copied!");
+    snackbar.showInfo("Config copied!");
     showConfigDialog.value = false;
 }
 </script>

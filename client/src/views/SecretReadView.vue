@@ -51,7 +51,7 @@ const handleReveal = async () => {
 const copyToClipboard = () => {
     if(secretData.value?.text) {
         navigator.clipboard.writeText(secretData.value.text)
-        alert('Text Copied!')
+        snackbar.showError('Text Copied!')
     }
 }
 

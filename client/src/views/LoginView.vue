@@ -46,10 +46,10 @@ const handleResetPassword = async () => {
     resetLoading.value = true;
     try {
         await authStore.resetPassword(resetEmail.value);
-        alert("Password reset email sent! Please check your inbox.");
+        snackbar.showInfo("Password reset email sent! Please check your inbox.");
         showResetDialog.value = false;
     } catch (e) {
-        alert("Error: " + e.message);
+        snackbar.showError("Error: " + e.message);
     } finally {
         resetLoading.value = false;
     }

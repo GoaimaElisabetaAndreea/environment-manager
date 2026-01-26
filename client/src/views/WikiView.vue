@@ -44,7 +44,7 @@ const handleSave = async () => {
         })
         isEditing.value = false
     } catch (e) {
-        alert('Failed to save wiki: ' + e.message)
+        snackbar.showError('Failed to save wiki: ' + e.message)
     } finally {
         saving.value = false
     }

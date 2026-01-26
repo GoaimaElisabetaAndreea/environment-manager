@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useEnvironmentStore } from '@/stores/environments' 
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/firebase'
+import { useSnackbarStore } from '@/stores/snackbar';
 
 const drawer = ref(true)
 const showAddEnvDialog = ref(false)
@@ -20,6 +21,7 @@ const editEnvVars = ref([])
 const authStore = useAuthStore()
 const envStore = useEnvironmentStore()
 const router = useRouter()
+const snackbarStore = useSnackbarStore()
 
 onMounted(async () => {
   onAuthStateChanged(auth, async (user) => {
@@ -134,6 +136,29 @@ const menuItems = [
 
 <template>
   <v-app>
+    <v-snackbar
+      v-model="snackbarStore.show"
+      :color="snackbarStore.color"
+      :timeout="snackbarStore.timeout"
+      location="bottom right"
+      variant="elevated"
+    >
+      <div class="d-flex align-center">
+        <v-icon class="mr-2" :icon="snackbarStore.color === 'success' ? 'mdi-check-circle' : 'mdi-alert-circle'"></v-icon>
+        {{ snackbarStore.message }}
+      </div>
+
+      <template v-slot:actions>
+        <v-btn
+          color="white"
+          variant="text"
+          @click="snackbarStore.show = false"
+          icon="mdi-close"
+          size="small"
+        >
+        </v-btn>
+      </template>
+    </v-snackbar>
     <v-navigation-drawer v-if="authStore.user" v-model="drawer" permanent>
       
       <v-list>

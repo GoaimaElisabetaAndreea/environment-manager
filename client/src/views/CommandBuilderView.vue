@@ -3,7 +3,9 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useCommandStore } from '@/stores/commands'
 import { useEnvironmentStore } from '@/stores/environments'
 import curlFlags from '@/assets/curl-flags.json'
+import { useSnackbarStore } from '@/stores/snackbar';
 
+const snackbar = useSnackbarStore();
 const commandStore = useCommandStore();
 const envStore = useEnvironmentStore();
 
@@ -174,7 +176,7 @@ const saveToHistory = () => {
 
 const copyHistoryItem = (cmd) => {
     navigator.clipboard.writeText(cmd);
-    alert('Command from history copied!');
+    snackbar.showInfo('Command from history copied!');
 }
 
 const formatTime = (isoString) => {
@@ -207,12 +209,12 @@ const openEditDialog = (cmd) => {
 
 const handleSave = async () => {
   if (!envStore.currentEnvId) {
-      alert("No environment selected. Cannot save.");
+      snackbar.showError("No environment selected. Cannot save.");
       return;
   }
 
   if (!newCommand.value.name || !newCommand.value.command) {
-      alert("Name and Command content are required.");
+      snackbar.showError("Name and Command content are required.");
       return;
   }
  
@@ -234,7 +236,7 @@ const handleSave = async () => {
       }
       showCreateDialog.value = false;
   } catch(e) {
-      alert("Error saving command: " + e.message);
+      snackbar.showError("Error saving command: " + e.message);
   }
 }
 
@@ -247,7 +249,7 @@ const selectCmd = (cmd) => {
 const copyToClipboard = () => {
   navigator.clipboard.writeText(finalCommand.value);
   saveToHistory(); 
-  alert('Copied & Saved to History!');
+  snackbar.showInfo('Copied & Saved to History!');
 }
 
 const handleDelete = async (id) => {

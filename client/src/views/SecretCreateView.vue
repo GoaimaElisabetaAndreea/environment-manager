@@ -37,7 +37,7 @@ const handleCreate = async () => {
         secretFile.value = null;
         password.value = '';
     } catch (e) {
-        alert('An error occurred: ' + e.message)
+        snackbar.showError('An error occurred: ' + e.message)
     } finally {
         loading.value = false
     }
@@ -45,7 +45,7 @@ const handleCreate = async () => {
 
 const copyToClipboard = () => {
     navigator.clipboard.writeText(generatedLink.value);
-    alert('Link copied! Keep it safe, it contains the decryption key.');
+    snackbar.showInfo('Link copied! Keep it safe, it contains the decryption key.');
 }
 
 </script>
