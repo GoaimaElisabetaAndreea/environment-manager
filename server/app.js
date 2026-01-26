@@ -7,16 +7,18 @@ const {
     getEnvironments, 
     createEnvironments, 
     updateEnvironment, 
-    deleteEnvironment,
-    addCommandToEnv,
-    removeCommandFromEnv,
-    addSshKeyToEnv,
-    removeSshKeyFromEnv
+    deleteEnvironment
 } = require('./controllers/environmentController');
 const { createSecret, getSecretMetaData, revealSecret } = require('./controllers/secretController');
 const { checkUrlStatus } = require('./controllers/statusController');
-const { testConnection } = require('./controllers/sshKeyController'); 
-
+const { 
+    createKey, 
+    getKeysByEnv,    
+    updateKey, 
+    deleteKey, 
+    testConnection 
+} = require('./controllers/sshKeyController');
+const { getCommands, createCommand, updateCommand, deleteCommand } = require('./controllers/commandController');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -36,13 +38,18 @@ apiRouter.get('/environments', getEnvironments);
 apiRouter.post('/environments', createEnvironments);
 apiRouter.put('/environments/:id', updateEnvironment);
 apiRouter.delete('/environments/:id', deleteEnvironment);
-
-apiRouter.post('/environments/:id/commands', addCommandToEnv);
-apiRouter.delete('/environments/:id/commands/:cmdId', removeCommandFromEnv);
-
-apiRouter.post('/environments/:id/ssh-keys', addSshKeyToEnv);
-apiRouter.delete('/environments/:id/ssh-keys/:keyId', removeSshKeyFromEnv);
 apiRouter.post('/ssh-keys/test', testConnection); 
+
+apiRouter.get('/environments/:envId/commands', getCommands); 
+apiRouter.post('/environments/:envId/commands', createCommand);
+apiRouter.put('/environments/:envId/commands/:cmdId', updateCommand);
+apiRouter.delete('/environments/:envId/commands/:cmdId', deleteCommand);
+
+apiRouter.get('/environments/:envId/ssh-keys', getKeysByEnv);
+apiRouter.post('/environments/:envId/ssh-keys', createKey);
+apiRouter.put('/environments/:envId/ssh-keys/:keyId', updateKey);
+apiRouter.delete('/environments/:envId/ssh-keys/:keyId', deleteKey);
+apiRouter.post('/ssh-keys/test', testConnection);
 
 apiRouter.post('/secrets', createSecret);
 apiRouter.post('/status/check', checkUrlStatus);

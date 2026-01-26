@@ -18,18 +18,18 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
 
     async function fetchKeys(envId) {
         if (!envId || typeof envId !== 'string') return;
-        if (!auth.currentUser) return;
-
+        
         loading.value = true;
         try {
             const headers = await getAuthHeaders();
-            const res = await fetch(`${API_URL}/ssh-keys/${envId}`, { headers });
+            const res = await fetch(`${API_URL}/environments/${envId}/ssh-keys`, { headers });
 
             if (!res.ok) throw new Error('Failed to fetch keys');
 
             keys.value = await res.json();
         } catch (error) {
             console.error(error);
+            keys.value = [];
         } finally {
             loading.value = false;
         }
@@ -37,30 +37,26 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
 
     async function addKey(keyData) {
         if (!keyData || typeof keyData !== 'object') throw new Error("Invalid key data");
-        if (!keyData.title || typeof keyData.title !== 'string' || !keyData.title.trim()) {
-            throw new Error("Title is required");
-        }
-        if (!keyData.value || typeof keyData.value !== 'string' || !keyData.value.trim()) {
-            throw new Error("Value is required");
-        }
-        if (!keyData.envId || typeof keyData.envId !== 'string') {
-            throw new Error("Environment ID is required");
-        }
+        if (!keyData.title || !keyData.title.trim()) throw new Error("Title is required");
+        if (!keyData.value || !keyData.value.trim()) throw new Error("Value is required");
+        if (!keyData.envId) throw new Error("Environment ID is required");
 
         try {
             const headers = await getAuthHeaders();
-            const res = await fetch(`${API_URL}/ssh-keys`, {
+            const res = await fetch(`${API_URL}/environments/${keyData.envId}/ssh-keys`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({
                     title: keyData.title.trim(),
                     value: keyData.value.trim(),
-                    envId: keyData.envId,
                     alias: keyData.alias ? keyData.alias.trim() : ''
                 })
             });
 
-            if (!res.ok) throw new Error('Failed to create key');
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || 'Failed to create key');
+            }
 
             const newKey = await res.json();
             keys.value.push(newKey);
@@ -71,28 +67,23 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
     }
 
     async function updateKey(id, keyData) {
-        if (!id || typeof id !== 'string') throw new Error("Invalid Key ID");
-        if (!keyData || typeof keyData !== 'object') throw new Error("Invalid update data");
+        if (!id) throw new Error("Invalid Key ID");
+        
+        const existingKey = keys.value.find(k => k.id === id);
+        const envId = existingKey ? existingKey.envId : keyData.envId;
+
+        if (!envId) throw new Error("Environment ID missing context for update");
 
         const updates = {};
-        if (keyData.title !== undefined) {
-            if (typeof keyData.title !== 'string' || !keyData.title.trim()) throw new Error("Invalid title");
-            updates.title = keyData.title.trim();
-        }
-        if (keyData.alias !== undefined) {
-            if (typeof keyData.alias !== 'string') throw new Error("Invalid alias");
-            updates.alias = keyData.alias.trim();
-        }
-        if (keyData.value !== undefined) {
-            if (typeof keyData.value !== 'string' || !keyData.value.trim()) throw new Error("Invalid value");
-            updates.value = keyData.value.trim();
-        }
+        if (keyData.title !== undefined) updates.title = keyData.title.trim();
+        if (keyData.alias !== undefined) updates.alias = keyData.alias.trim();
+        if (keyData.value !== undefined) updates.value = keyData.value.trim();
 
-        if (Object.keys(updates).length === 0) throw new Error("No valid fields to update");
+        if (Object.keys(updates).length === 0) return;
 
         try {
             const headers = await getAuthHeaders();
-            const res = await fetch(`${API_URL}/ssh-keys/${id}`, {
+            const res = await fetch(`${API_URL}/environments/${envId}/ssh-keys/${id}`, {
                 method: 'PUT',
                 headers,
                 body: JSON.stringify(updates)
@@ -113,11 +104,14 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
     }
 
     async function deleteKey(id) {
-        if (!id || typeof id !== 'string') throw new Error("Invalid Key ID");
+        if (!id) throw new Error("Invalid Key ID");
+        
+        const existingKey = keys.value.find(k => k.id === id);
+        if (!existingKey || !existingKey.envId) return;
 
         try {
             const headers = await getAuthHeaders();
-            const res = await fetch(`${API_URL}/ssh-keys/${id}`, {
+            const res = await fetch(`${API_URL}/environments/${existingKey.envId}/ssh-keys/${id}`, {
                 method: 'DELETE',
                 headers
             });
@@ -158,7 +152,7 @@ export const useSshKeyStore = defineStore('sshKeys', () => {
 
         try {
             const headers = await getAuthHeaders();
-       
+            
             const res = await fetch(`${API_URL}/ssh-keys/test`, {
                 method: 'POST',
                 headers,
