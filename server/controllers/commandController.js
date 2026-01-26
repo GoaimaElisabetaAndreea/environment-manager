@@ -43,6 +43,8 @@ const getCommands = async (req, res) => {
         const safeSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
 
         const countSnapshot = await commandsRef.count().get();
+
+        // how many commands to skip based on the page
         const offset = (pageInt - 1) * limitInt;
 
         const snapshot = await commandsRef

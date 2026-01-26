@@ -40,7 +40,6 @@ export const useEnvironmentStore = defineStore('environments', () => {
         if (environments.value.length > 0) selectEnvironment(environments.value[0].id)
         else selectEnvironment(null)
       }
-
     } catch(error){
       console.error(error);
     } finally {
@@ -117,10 +116,10 @@ export const useEnvironmentStore = defineStore('environments', () => {
 
         if(!res.ok) throw new Error("Failed to update env");
 
-        const env = environments.value.find(e => e.id === id);
-        if (env){
-          Object.assign(env, data);
-        }
+      const index = environments.value.findIndex(e => e.id === id);
+      if (index !== -1) {
+          environments.value[index] = { ...environments.value[index], ...data };
+      }
       } catch (e) {
         console.error(e);
         throw e;

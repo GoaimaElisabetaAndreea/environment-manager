@@ -19,7 +19,7 @@ export const useCommandStore = defineStore('commands', () => {
   const getAuthHeaders = async () => {
     const user = auth.currentUser
     if (!user) {
-      throw new Error("Security Violation: User is not authenticated.")
+      throw new Error("User is not authenticated.")
     }
     const token = await user.getIdToken()
     return {
@@ -116,7 +116,7 @@ export const useCommandStore = defineStore('commands', () => {
 
     if (!id) throw new Error("Validation Error: Command ID is missing.")
     if (!updates || Object.keys(updates).length === 0) {
-        throw new Error("Validation Error: No update data provided.")
+        throw new Error("No update data provided.")
     }
 
     try {
@@ -147,7 +147,7 @@ export const useCommandStore = defineStore('commands', () => {
 
   async function deleteCommand(id) {
     const envId = validateEnvironment()
-    if (!id) throw new Error("Validation Error: Command ID is missing.")
+    if (!id) throw new Error(" Command ID is required.")
 
     try {
       const headers = await getAuthHeaders()

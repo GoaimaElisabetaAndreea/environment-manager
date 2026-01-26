@@ -42,28 +42,27 @@ onMounted(() => {
   }
   
   const savedHistory = localStorage.getItem('cmd_history');
+  
   if (savedHistory) {
     try {
         const parsed = JSON.parse(savedHistory);
         if (Array.isArray(parsed)) {
-        
             commandHistory.value = parsed.map(item => ({
-                cmd: item.cmd || item.command || '', 
+                cmd: item.cmd || '', 
                 timestamp: item.timestamp || new Date().toISOString(),
-                templateName: item.templateName || item.title || item.name || 'Unknown'
+                templateName: item.templateName || 'Unknown'
             })).filter(item => item.cmd); 
         }
     } catch(e) {
-        console.error("Eroare la încărcarea istoricului:", e);
-
+        console.error("Error at loading command history:", e);
         commandHistory.value = [];
         localStorage.removeItem('cmd_history');
     }
   }
 })
 
-watch(() => envStore.currentEnvId, (newVal) => {
-  if(newVal) {
+watch(() => envStore.currentEnvId, (newId) => {
+  if(newId) {
       selectedCommand.value = null;
       commandStore.fetchCommands();
   }
@@ -84,13 +83,18 @@ const filteredSuggestions = computed(() => {
 const handleInput = (event) => {
   const text = newCommand.value.command || '';
   let cursor = 0;
+
+  // selectionStart shows where the cursor is 
   if (event.target && typeof event.target.selectionStart === 'number') {
     cursor = event.target.selectionStart;
   }
   cursorIndex.value = cursor;
 
   const lastOpenBrace = text.lastIndexOf('{{', cursor - 1);
+
+  // there is no open brace in the left of the cursor 
   if (lastOpenBrace !== -1) {
+    
     const closingBrace = text.indexOf('}}', lastOpenBrace);
     if (closingBrace === -1 || closingBrace >= cursor) {
       showSuggestions.value = true;

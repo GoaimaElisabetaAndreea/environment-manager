@@ -17,6 +17,7 @@ const newLink = ref({
   username: '',
   password: ''
 })
+
 const addingLink = ref(false)
 const showPassword = ref(false)
 

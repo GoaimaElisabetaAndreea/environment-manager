@@ -2,7 +2,9 @@
 import { ref } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
+import { useSnackbarStore } from '@/stores/snackbar';
 
+const snackbar = useSnackbarStore();
 const authStore = useAuthStore();
 const router = useRouter();
 

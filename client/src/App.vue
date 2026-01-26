@@ -30,10 +30,6 @@ onMounted(async () => {
         authStore.user = user;
     
         await envStore.fetchEnvironments();
-
-        if (router.currentRoute.value.path === '/login') {
-          router.push('/dashboard');
-        } 
       } else {
         authStore.user = null;
       
@@ -42,7 +38,7 @@ onMounted(async () => {
         }
       }
     } catch (error) {
-      console.error("Eroare la inițializare:", error);
+      console.error("Error:", error);
     } finally {
       
       authStore.loading = false;
@@ -93,9 +89,7 @@ const handleUpdateEnv = async () => {
 }
 
 const handleDeleteEnv = async(id) => {
-  if(confirm("Sigur ștergi acest mediu?")) {
-      await envStore.deleteEnvironment(id);
-  }
+  await envStore.deleteEnvironment(id);
 }
 
 const openEditDialog = (env) => {
