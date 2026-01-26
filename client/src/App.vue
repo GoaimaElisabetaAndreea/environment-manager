@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useEnvironmentStore } from '@/stores/environments' 
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/firebase'
+import { useSnackbarStore } from '@/stores/snackbar';
 
 const drawer = ref(true)
 const showAddEnvDialog = ref(false)
@@ -20,25 +21,33 @@ const editEnvVars = ref([])
 const authStore = useAuthStore()
 const envStore = useEnvironmentStore()
 const router = useRouter()
+const snackbarStore = useSnackbarStore()
 
 onMounted(async () => {
+  onAuthStateChanged(auth, async (user) => {
+    try {
+      if (user) {
+        authStore.user = user;
+    
+        await envStore.fetchEnvironments();
 
-  onAuthStateChanged(auth, async(user) =>{
-    if(user){
-      authStore.user = user;
-
-      await envStore.fetchEnvironments();
-
-      if(router.currentRoute.value.path === '/login'){
-        router.push('/dashboard');
-      } 
-    } else {
-      authStore.user = null
-      if (router.currentRoute.value.path !== '/login' && router.currentRoute.value.path !== '/register') {
-        router.push('/login')
+        if (router.currentRoute.value.path === '/login') {
+          router.push('/dashboard');
+        } 
+      } else {
+        authStore.user = null;
+      
+        if (router.currentRoute.value.path !== '/login' && router.currentRoute.value.path !== '/register') {
+          router.push('/login');
+        }
       }
+    } catch (error) {
+      console.error("Eroare la inițializare:", error);
+    } finally {
+      
+      authStore.loading = false;
     }
-  })
+  });
 })
 
 watch(() => authStore.user, async (newUser) => {
@@ -63,23 +72,18 @@ const handleCreateEnv = async () => {
 
 const handleUpdateEnv = async () => {
   if(!editEnvName.value) return;
-
   updatingEnv.value = true;
-
   try{
     const variablesObj = {}
-
     editEnvVars.value.forEach(v =>{
       if(v.key && v.value){
         variablesObj[v.key] = v.value;
       }
     })
-
     await envStore.updateEnvironment(editEnvId.value, {
       name: editEnvName.value,
       variables: variablesObj
     });
-
     showEditEnvDialog.value = false;
   }catch (e) {
     alert('Error!')
@@ -89,13 +93,14 @@ const handleUpdateEnv = async () => {
 }
 
 const handleDeleteEnv = async(id) => {
-  await envStore.deleteEnvironment(id);
+  if(confirm("Sigur ștergi acest mediu?")) {
+      await envStore.deleteEnvironment(id);
+  }
 }
 
 const openEditDialog = (env) => {
   editEnvId.value = env.id
   editEnvName.value = env.name
-
   editEnvVars.value = [];
   if(env.variables){
     Object.entries(env.variables).forEach(([key, value]) => {
@@ -121,16 +126,39 @@ const handleLogout = async () => {
 }
 
 const menuItems = [
-  { title: 'Dashboard', icon: 'mdi-view-dashboard', to: '/dashboard' },
+  { title: 'Dashboard', icon: 'mdi-view-dashboard', to: '/' }, 
   { title: 'Wiki', icon: 'mdi-book-open-page-variant', to: '/wiki' },
   { title: 'Command Builder', icon: 'mdi-console', to: '/commands' },
   { title: 'SSH Manager', icon: 'mdi-key-variant', to: '/ssh-keys' }, 
-  { title: 'Share Secret', icon: 'mdi-lock-plus', to: '/secrets/create' },
+  { title: 'Share Secret', icon: 'mdi-lock-plus', to: '/secrets' },
 ]
 </script>
 
 <template>
   <v-app>
+    <v-snackbar
+      v-model="snackbarStore.show"
+      :color="snackbarStore.color"
+      :timeout="snackbarStore.timeout"
+      location="bottom right"
+      variant="elevated"
+    >
+      <div class="d-flex align-center">
+        <v-icon class="mr-2" :icon="snackbarStore.color === 'success' ? 'mdi-check-circle' : 'mdi-alert-circle'"></v-icon>
+        {{ snackbarStore.message }}
+      </div>
+
+      <template v-slot:actions>
+        <v-btn
+          color="white"
+          variant="text"
+          @click="snackbarStore.show = false"
+          icon="mdi-close"
+          size="small"
+        >
+        </v-btn>
+      </template>
+    </v-snackbar>
     <v-navigation-drawer v-if="authStore.user" v-model="drawer" permanent>
       
       <v-list>

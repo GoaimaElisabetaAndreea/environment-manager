@@ -1,4 +1,5 @@
 const { db } = require('../config/firebase');
+const { Client } = require('ssh2');
 const crypto = require('crypto');
 const net = require('net');
 
@@ -164,7 +165,7 @@ const deleteKey = async (req, res) => {
 };
 
 const testConnection = async (req, res) => {
-    const { host, port } = req.body;
+    const { host, port, username, privateKey } = req.body;
 
     if (!host || typeof host !== 'string' || !host.trim()) {
         return res.status(400).json({ error: 'Valid host is required' });
@@ -173,45 +174,63 @@ const testConnection = async (req, res) => {
     let targetPort = 22;
     if (port !== undefined) {
         const parsedPort = parseInt(port, 10);
-        if (isNaN(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
-            return res.status(400).json({ error: 'Port must be a number between 1 and 65535' });
+        if (!isNaN(parsedPort) && parsedPort > 0 && parsedPort <= 65535) {
+            targetPort = parsedPort;
         }
-        targetPort = parsedPort;
     }
 
-    const timeout = 3000;
-    const socket = new net.Socket();
-    let status = 'closed';
+    const conn = new Client();
 
-    socket.setTimeout(timeout);
-
-    socket.on('connect', () => {
-        status = 'open';
-        socket.destroy();
-    });
-
-    socket.on('timeout', () => {
-        status = 'timeout';
-        socket.destroy();
-    });
-
-    socket.on('error', (err) => {
-        status = 'error';
-    });
-
-    socket.on('close', () => {
+    const timeout = setTimeout(() => {
+        try { conn.end(); } catch(e){}
         if (!res.headersSent) {
-            res.json({ host, port: targetPort, status });
+            res.json({ host, port: targetPort, status: 'timeout', message: 'Connection timed out' });
+        }
+    }, 5000);
+
+    conn.on('ready', () => {
+        clearTimeout(timeout);
+        conn.end();
+
+        if (!res.headersSent) {
+            res.json({ host, port: targetPort, status: 'open', message: 'SSH Connection & Auth Successful!' });
+        }
+    });
+
+    conn.on('error', (err) => {
+        clearTimeout(timeout);
+        
+        if (err.level === 'client-authentication' || err.message.includes('All configured authentication methods failed')) {
+            if (!res.headersSent) {
+                res.json({ 
+                    host, 
+                    port: targetPort, 
+                    status: 'open', 
+                    message: 'SSH Service Online (Auth required)' 
+                });
+            }
+        } else {
+        
+            if (!res.headersSent) {
+                res.json({ host, port: targetPort, status: 'error', message: err.message });
+            }
         }
     });
 
     try {
-        socket.connect(targetPort, host);
+        conn.connect({
+            host: host,
+            port: targetPort,
+            username: username || 'root', 
+            privateKey: privateKey, 
+            readyTimeout: 5000
+        });
     } catch (e) {
-        if (!res.headersSent) {
-            res.status(500).json({ error: "Failed to attempt connection" });
-        }
+        clearTimeout(timeout);
+        if (!res.headersSent) res.status(500).json({ error: "Failed to init SSH client" });
     }
 };
+
+module.exports = { createKey, getKeysByEnv, deleteKey, testConnection, updateKey };
 
 module.exports = { createKey, getKeysByEnv, deleteKey, testConnection, updateKey };

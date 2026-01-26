@@ -1,7 +1,9 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useEnvironmentStore } from '@/stores/environments'
+import { useSnackbarStore } from '@/stores/snackbar';
 
+const snackbar = useSnackbarStore();
 const envStore = useEnvironmentStore()
 
 const showAddLinkDialog = ref(false)
@@ -100,7 +102,7 @@ const handleSaveLink = async () => {
     });
 
   } catch (e) {
-    alert('Failed to save link: ' + e)
+    snackbar.showError('Failed to save link: ' + e)
   } finally {
     addingLink.value = false
   }
@@ -115,7 +117,7 @@ const handleDeleteLink = async (index) => {
 const handleCardClick = (link) => {
   if (link.password) {
     navigator.clipboard.writeText(link.password);
-    alert(`Password for ${link.title} copied to clipboard!`);
+    snackbar.showInfo(`Password for ${link.title} copied to clipboard!`);
   } else {
     openLink(link.url);
   }
@@ -127,7 +129,7 @@ const openLink = (url) => {
 
 const copyUser = (user) => {
     navigator.clipboard.writeText(user);
-    alert('Username copied!');
+    snackbar.showInfo('Username copied!');
 }
 
 const getIcon = (title) => {

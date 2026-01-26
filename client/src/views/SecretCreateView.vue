@@ -31,13 +31,13 @@ const handleCreate = async () => {
             ttlInMinutes: ttl.value
         });
         
-        generatedLink.value = `${window.location.origin}/secrets/view/${id}#${key}`
+       generatedLink.value = `${window.location.origin}/s/${id}#${key}`
         
         secretContent.value = '';
         secretFile.value = null;
         password.value = '';
     } catch (e) {
-        alert('An error occurred: ' + e.message)
+        snackbar.showError('An error occurred: ' + e.message)
     } finally {
         loading.value = false
     }
@@ -45,7 +45,7 @@ const handleCreate = async () => {
 
 const copyToClipboard = () => {
     navigator.clipboard.writeText(generatedLink.value);
-    alert('Link copied! Keep it safe, it contains the decryption key.');
+    snackbar.showInfo('Link copied! Keep it safe, it contains the decryption key.');
 }
 
 </script>

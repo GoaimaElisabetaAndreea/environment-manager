@@ -2,59 +2,59 @@ const { db } = require('../config/firebase');
 
 const getCommands = async (req, res) => {
     try {
-        const { envId } = req.query;
+        const { envId, page = 1, limit = 5, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
         const userId = req.user.uid;
 
-        if (!envId || typeof envId !== 'string') {
-            return res.status(400).json({ error: "Valid envId is required" });
-        }
+        if (!envId) return res.status(400).json({ error: "envId required" });
 
-        const snapshot = await db.collection('commands')
+        const limitInt = parseInt(limit);
+        const offset = (parseInt(page) - 1) * limitInt;
+
+        let query = db.collection('commands')
+            .where("envId", "==", envId)
+            .where("userId", "==", userId);
+
+        query = query.orderBy(sortBy, sortOrder === 'desc' ? 'desc' : 'asc');
+
+        const countSnapshot = await db.collection('commands')
             .where("envId", "==", envId)
             .where("userId", "==", userId)
+            .count()
             .get();
 
-        const commands = [];
-        if (!snapshot.empty) {
-            snapshot.forEach(doc => {
-                commands.push({ id: doc.id, ...doc.data() });
-            });
-        }
+        const snapshot = await query.limit(limitInt).offset(offset).get();
 
-        res.status(200).json(commands);
+        const commands = [];
+        snapshot.forEach(doc => commands.push({ id: doc.id, ...doc.data() }));
+        
+        res.status(200).json({
+            data: commands,
+            total: countSnapshot.data().count,
+            page: parseInt(page),
+            limit: limitInt,
+            totalPages: Math.ceil(countSnapshot.data().count / limitInt)
+        });
+
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: error.message });
     }
 }
 
 const createCommand = async (req, res) => {
     try {
-        const { name, command, envId } = req.body;
+        const { name, command, envId, description, flags } = req.body;
         const userId = req.user.uid;
 
-        if (!name || typeof name !== 'string' || !name.trim()) {
-            return res.status(400).json({ error: "Name is required" });
-        }
-        if (!command || typeof command !== 'string' || !command.trim()) {
-            return res.status(400).json({ error: "Command content is required" });
-        }
-        if (!envId || typeof envId !== 'string') {
-            return res.status(400).json({ error: "envId is required" });
-        }
-
-        const envDoc = await db.collection('environments').doc(envId).get();
-
-        if (!envDoc.exists) {
-            return res.status(404).json({ error: "Environment not found" });
-        }
-
-        if (envDoc.data().userId !== userId) {
-            return res.status(403).json({ error: "Unauthorized" });
+        if (!name || !command || !envId) {
+            return res.status(400).json({ error: "Name, Command and EnvID are required" });
         }
 
         const newCommand = {
-            name: name.trim(),
-            command: command.trim(),
+            name,
+            command,
+            description: description || '',
+            flags: flags || [],
             envId,
             userId,
             createdAt: new Date().toISOString()
@@ -70,37 +70,28 @@ const createCommand = async (req, res) => {
 const updateCommand = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, command } = req.body;
+        const { name, command, description, flags } = req.body;
+        
         const updates = {};
 
-        if (name !== undefined) {
-            if (typeof name !== 'string' || !name.trim()) {
-                return res.status(400).json({ error: "Name must be a valid string" });
-            }
-            updates.name = name.trim();
-        }
-
-        if (command !== undefined) {
-            if (typeof command !== 'string' || !command.trim()) {
-                return res.status(400).json({ error: "Command must be a valid string" });
-            }
-            updates.command = command.trim();
-        }
+        if (name !== undefined) updates.name = name;
+        if (command !== undefined) updates.command = command;
+        if (description !== undefined) updates.description = description;
+        if (flags !== undefined) updates.flags = flags;
 
         if (Object.keys(updates).length === 0) {
-            return res.status(400).json({ error: "No valid fields provided for update" });
+            return res.status(400).json({ error: "No fields to update" });
         }
 
         const docRef = db.collection('commands').doc(id);
         const doc = await docRef.get();
 
-        if (!doc.exists) return res.status(404).json({ error: "Command not found" });
-
+        if (!doc.exists) return res.status(404).json({ error: "Not found" });
         if (doc.data().userId !== req.user.uid) return res.status(403).json({ error: "Unauthorized" });
 
         await docRef.update(updates);
-
-        res.status(200).json({ id, ...doc.data(), ...updates });
+        
+        res.status(200).json({ ...doc.data(), ...updates, id });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -109,17 +100,9 @@ const updateCommand = async (req, res) => {
 const deleteCommand = async (req, res) => {
     try {
         const { id } = req.params;
-
         const docRef = db.collection('commands').doc(id);
-        const doc = await docRef.get();
-
-        if (!doc.exists) return res.status(404).json({ error: "Command not found" });
-
-        if (doc.data().userId !== req.user.uid) return res.status(403).json({ error: "Unauthorized" });
-
         await docRef.delete();
-
-        res.status(200).json({ message: "Command deleted" });
+        res.status(200).json({ message: "Deleted" });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
